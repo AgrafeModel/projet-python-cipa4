@@ -4,3 +4,4 @@
 
 - Brieuc JOONNEKINDT : OnWix
 - Corentin DEGUISNE : AgrafeModel
+- Matheo BERTIN : matheo6209
