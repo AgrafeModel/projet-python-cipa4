@@ -3,3 +3,4 @@
 **Editeurs**
 
 - Brieuc JOONNEKINDT : OnWix
+- Corentin DEGUISNE : AgrafeModel
