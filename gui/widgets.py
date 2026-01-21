@@ -6,17 +6,21 @@
 
 import pygame
 
-
+# Button widget with hover effect and optional tooltip
 class Button:
-    # Initializes a button with given rectangle, text, and font
-    def __init__(self, rect, text, font):
+    def __init__(self, rect, text, font, tooltip: str = ""):
         self.rect = pygame.Rect(rect)
         self.text = text
         self.font = font
+        self.tooltip = tooltip
         self.hover = False
+        self.enabled = True # Button enabled state
 
-    # Returns True if clicked
+    # Handles events for the button, returns True if clicked
     def handle_event(self, event) -> bool:
+        if not self.enabled:
+            return False
+
         if event.type == pygame.MOUSEMOTION:
             self.hover = self.rect.collidepoint(event.pos)
 
@@ -26,16 +30,31 @@ class Button:
 
         return False
 
+    # Returns the tooltip text if hovered
+    def get_hover_text(self, mouse_pos) -> str:
+        if self.rect.collidepoint(mouse_pos):
+            return self.tooltip
+        return ""
+
     # Draws the button on the surface
     def draw(self, surface):
-        color = (80, 80, 80) if not self.hover else (110, 110, 110)
-        pygame.draw.rect(surface, color, self.rect, border_radius=10)
-        pygame.draw.rect(surface, (180, 180, 180), self.rect, 2, border_radius=10)
+        if not self.enabled:
+            color = (60, 60, 60) # grisé
+            border = (120, 120, 120)
+            text_color = (140, 140, 140)
+        else:
+            color = (80, 80, 80) if not self.hover else (110, 110, 110)
+            border = (180, 180, 180)
+            text_color = (240, 240, 240)
 
-        label = self.font.render(self.text, True, (240, 240, 240))
+        pygame.draw.rect(surface, color, self.rect, border_radius=10)
+        pygame.draw.rect(surface, border, self.rect, 2, border_radius=10)
+
+        label = self.font.render(self.text, True, text_color)
         surface.blit(label, label.get_rect(center=self.rect.center))
 
 
+# Stepper widget for selecting numeric values
 class Stepper:
     # Initializes a stepper widget with plus and minus buttons
     def __init__(self, x, y, w, h, value, min_value, max_value, font):
@@ -167,35 +186,29 @@ class ChatBox:
 
 # Panel displaying the list of players
 class PlayerListPanel:
-    # Initializes the player list panel
-    """
-    players: list of dict
-      {
-        "name": str,
-        "alive": bool,
-        "role": "villageois" | "loup",
-        "note": int  # 0=none,1=gentil,2=suspect,3=loup
-      }
-    """
+    # Labels for player notes
     NOTE_LABELS = ["-", "Gentil", "Suspect", "Loup"]
 
-    # Initializes the player list panel with given rectangle, font, and players
+    # Initializes the player list panel
     def __init__(self, rect: pygame.Rect, font: pygame.font.Font, small_font: pygame.font.Font, players: list[dict]):
         self.rect = pygame.Rect(rect)
         self.font = font
         self.small_font = small_font
         self.players = players
 
-        # Layout settings
+        # Layout
         self.padding = 10
         self.title_h = 44
         self.row_h = 44
+        self.scroll_px = 0
 
-        self.scroll_px = 0  # current scroll position in pixels (vertical)
+        # Vote button state
+        self.show_vote_buttons = False
+        self.on_vote = None  # callable(index:int) -> None
+        self.selected_vote_index = None
 
-    # Calculates the viewport rectangle for the rows
+    # Returns the rectangle for the rows viewport
     def _rows_viewport_rect(self) -> pygame.Rect:
-        # Returns the rectangle area where rows are drawn (excluding title)
         return pygame.Rect(
             self.rect.x,
             self.rect.y + self.title_h,
@@ -207,89 +220,127 @@ class PlayerListPanel:
     def _content_height(self) -> int:
         return len(self.players) * self.row_h
 
-    # Calculates the maximum scroll position
+    # Maximum scroll position
     def _max_scroll(self) -> int:
         vp = self._rows_viewport_rect()
-        # value such that bottom of content aligns with bottom of viewport
         return max(0, self._content_height() - (vp.height - self.padding))
 
-    def handle_event(self, event):
-        # Scroll uniquement si la souris est au-dessus du panneau
-        if event.type == pygame.MOUSEWHEEL:
-            mx, my = pygame.mouse.get_pos()
-            if not self.rect.collidepoint(mx, my):
-                return
-            # scroll up -> event.y > 0
-            self.scroll_px = max(0, min(self._max_scroll(), self.scroll_px - event.y * 40))
-            return
-
-        # Handle clicks on note buttons
-        if event.type != pygame.MOUSEBUTTONDOWN or event.button != 1:
-            return
-
-        # Retrieve mouse position
-        mx, my = event.pos
-        vp = self._rows_viewport_rect()
-        if not vp.collidepoint(mx, my):
-            return
-
-        # Convert mouse y to row index considering scroll
-        local_y = (my - vp.y) + self.scroll_px
-        idx = int(local_y // self.row_h)
-        # Safety check on index
-        if idx < 0 or idx >= len(self.players):
-            return
-
-        # Toggle note for the clicked player
-        p = self.players[idx]
-        if not p["alive"]:
-            return  # mort -> note désactivée
-
-        # Toggle note for the clicked player
-        btn_rect = self._note_rect_for_row(idx)
-        if btn_rect.collidepoint(mx, my):
-            # Cycle through notes 0->1->2->3->0
-            p["note"] = (p["note"] + 1) % 4
-
-    # Calculates the rectangle for a specific row
+    # Returns the rectangle for a specific row
     def _row_rect(self, idx: int) -> pygame.Rect:
         vp = self._rows_viewport_rect()
-        # y position considering scroll and padding
         y = vp.y + self.padding + idx * self.row_h - self.scroll_px
         x = self.rect.x + self.padding
         w = self.rect.width - 2 * self.padding
         h = self.row_h - 6
         return pygame.Rect(x, y, w, h)
 
-    # Calculates the rectangle for the note button in a specific row
+    # Note button rectangle for a specific row
     def _note_rect_for_row(self, idx: int) -> pygame.Rect:
         row = self._row_rect(idx)
-        w, h = 90, 30  # button size
-        # Returns rectangle aligned to the right of the row
-        return pygame.Rect(
-            row.right - 10 - w,
-            row.y + (row.height - h) // 2,
-            w,
-            h
-        )
-
-    # Calculates the rectangle for the role badge in a specific row
-    def _role_badge_rect_for_row(self, idx: int) -> pygame.Rect:
-        row = self._row_rect(idx)
-        w, h = 90, 30
+        w, h = 100, 30
         return pygame.Rect(row.right - 10 - w, row.y + (row.height - h) // 2, w, h)
 
-    # Draws the player list panel on the surface
+    # Role badge rectangle for a specific row
+    def _role_badge_rect_for_row(self, idx: int) -> pygame.Rect:
+        row = self._row_rect(idx)
+        w, h = 100, 30
+        return pygame.Rect(row.right - 10 - w, row.y + (row.height - h) // 2, w, h)
+
+    # Vote button rectangle for a specific row
+    def _vote_rect_for_row(self, idx: int) -> pygame.Rect:
+        row = self._row_rect(idx)
+        size = 22
+        
+        x = row.right - 10 - 100 - 12 - size  # 100 for note button width + 12 gap
+        y = row.y + (row.height - size) // 2
+        return pygame.Rect(x, y, size, size)
+
+    # Handles events for the player list panel
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEWHEEL:
+            mx, my = pygame.mouse.get_pos()
+            if not self.rect.collidepoint(mx, my):
+                return
+            # Scroll up/down
+            self.scroll_px = max(0, min(self._max_scroll(), self.scroll_px - event.y * 40))
+            return
+
+        if event.type != pygame.MOUSEBUTTONDOWN or event.button != 1:
+            return
+
+        # Handle clicks on rows
+        mx, my = event.pos
+        vp = self._rows_viewport_rect()
+        if not vp.collidepoint(mx, my):
+            return
+
+        # Determine which row was clicked
+        local_y = (my - vp.y) + self.scroll_px
+        idx = int(local_y // self.row_h)
+        if idx < 0 or idx >= len(self.players):
+            return
+
+        # Get the player
+        p = self.players[idx]
+        if not p["alive"]:
+            return
+
+        # Vote click
+        if self.show_vote_buttons:
+            vote_rect = self._vote_rect_for_row(idx)
+            if vote_rect.collidepoint(mx, my):
+                self.selected_vote_index = idx
+                if callable(self.on_vote):
+                    self.on_vote(idx)  # Send index of voted player
+                return
+
+
+        # Note click
+        note_rect = self._note_rect_for_row(idx)
+        if note_rect.collidepoint(mx, my):
+            p["note"] = (p["note"] + 1) % 4
+    
+    # Returns hover text for the given mouse position
+    def get_hover_text(self, mouse_pos) -> str:
+        mx, my = mouse_pos
+        vp = self._rows_viewport_rect()
+        if not vp.collidepoint(mx, my):
+            return ""
+
+        # Determine which row is hovered
+        local_y = (my - vp.y) + self.scroll_px
+        idx = int(local_y // self.row_h)
+        if idx < 0 or idx >= len(self.players):
+            return ""
+
+        p = self.players[idx]
+        if not p["alive"]:
+            return f"{p['name']} est mort.\nRôle révélé : {p['role'].capitalize()}"
+
+        # vote hover
+        if self.show_vote_buttons and self._vote_rect_for_row(idx).collidepoint(mx, my):
+            return f"Vote (sélection)\nClique pour sélectionner {p['name']}"
+
+        # note hover
+        note_rect = self._note_rect_for_row(idx)
+        if note_rect.collidepoint(mx, my):
+            label = self.NOTE_LABELS[p["note"]]
+            meaning = "Neutre" if label == "-" else label
+            return f"Annotation personnelle : {meaning}\nClique pour changer"
+
+        return ""
+
+
+    # Draws the player list panel
     def draw(self, surface):
-        # Panel background and border
         pygame.draw.rect(surface, (35, 35, 40), self.rect, border_radius=12)
         pygame.draw.rect(surface, (180, 180, 180), self.rect, 2, border_radius=12)
 
-        # Title 
+        # Title
         title = self.font.render("Joueurs", True, (235, 235, 235))
         surface.blit(title, (self.rect.x + self.padding, self.rect.y + 8))
 
-        # Content (player rows) with clipping for scrolling
+        # Rows
         vp = self._rows_viewport_rect()
         clip = surface.get_clip()
         surface.set_clip(vp)
@@ -297,25 +348,36 @@ class PlayerListPanel:
         # Draw each player row
         for i, p in enumerate(self.players):
             row_rect = self._row_rect(i)
-
-            # Outside viewport -> skip
             if row_rect.bottom < vp.top or row_rect.top > vp.bottom:
                 continue
 
             pygame.draw.rect(surface, (45, 45, 52), row_rect, border_radius=10)
 
-            # Name label
             name_color = (220, 220, 220) if p["alive"] else (140, 140, 140)
             name_label = self.font.render(p["name"], True, name_color)
             surface.blit(name_label, (row_rect.x + 10, row_rect.y + 8))
 
-            # Note button or role badge depending on alive status
+            # Draw vote button and note badge if alive
             if p["alive"]:
+                if self.show_vote_buttons:
+                    vr = self._vote_rect_for_row(i)
+                    pygame.draw.ellipse(surface, (40, 160, 220), vr)
+                    pygame.draw.ellipse(surface, (210, 210, 210), vr, 2)
+
+                    # Icon (simple check mark)
+                    if self.selected_vote_index == i:
+                        pygame.draw.ellipse(surface, (240, 240, 240), vr.inflate(6, 6), 2)
+
+
+
+                # Note badge
                 btn = self._note_rect_for_row(i)
                 pygame.draw.rect(surface, (120, 80, 160), btn, border_radius=8)
                 pygame.draw.rect(surface, (200, 200, 200), btn, 2, border_radius=8)
                 lab = self.small_font.render(self.NOTE_LABELS[p["note"]], True, (240, 240, 240))
                 surface.blit(lab, lab.get_rect(center=btn.center))
+
+            # Draw role badge if dead
             else:
                 badge = self._role_badge_rect_for_row(i)
                 role = p["role"]
@@ -331,4 +393,46 @@ class PlayerListPanel:
                 lab = self.small_font.render(text, True, (230, 230, 230))
                 surface.blit(lab, lab.get_rect(center=badge.center))
 
+        # Restore previous clip
         surface.set_clip(clip)
+
+# Tooltip widget for displaying hover text
+class Tooltip:
+    def __init__(self, font: pygame.font.Font):
+        self.font = font
+        self.padding = 8
+
+    # Draws the tooltip at the given position
+    def draw(self, surface, text: str, pos: tuple[int, int]):
+        if not text:
+            return
+
+        # Let's support multi-line tooltips
+        lines = text.split("\n")
+        rendered = [self.font.render(line, True, (240, 240, 240)) for line in lines]
+
+        # Calculate size
+        w = max(r.get_width() for r in rendered) + 2 * self.padding
+        h = sum(r.get_height() for r in rendered) + 2 * self.padding + (len(lines) - 1) * 2
+
+        x, y = pos
+        x += 14
+        y += 14
+
+        # keep inside window
+        sw, sh = surface.get_size()
+        if x + w > sw:
+            x = sw - w - 10
+        if y + h > sh:
+            y = sh - h - 10
+
+        # Tooltip background
+        rect = pygame.Rect(x, y, w, h)
+        pygame.draw.rect(surface, (20, 20, 24), rect, border_radius=8)
+        pygame.draw.rect(surface, (180, 180, 180), rect, 1, border_radius=8)
+
+        # Draw each line
+        yy = y + self.padding
+        for r in rendered:
+            surface.blit(r, (x + self.padding, yy))
+            yy += r.get_height() + 2

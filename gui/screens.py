@@ -6,7 +6,8 @@
 
 import pygame
 
-from gui.widgets import Button, Stepper, ChatBox, PlayerListPanel
+from gui.widgets import Button, Stepper, ChatBox, PlayerListPanel, Tooltip
+from game.engine import GameEngine
 
 # Base class for all screens
 class Screen:
@@ -79,101 +80,365 @@ class GameScreen(Screen):
         self.small_font = pygame.font.SysFont(None, 22)
         self.big_font = pygame.font.SysFont(None, 34)
 
-        # Layout (comme ton dessin)
+        # Layout
         margin = 20
         left_w = 320
         gap = 20
 
+        # Rectangles for different UI sections
         self.info_rect = pygame.Rect(margin, margin, left_w, 80)
         self.list_rect = pygame.Rect(margin, margin + 100, left_w, app.h - (margin + 100) - margin)
         self.chat_rect = pygame.Rect(margin + left_w + gap, margin, app.w - (margin + left_w + gap) - margin, app.h - 2 * margin)
 
-        # Phase mock (on branchera au moteur ensuite)
-        self.phase = "Jour"  # "Nuit"
-        self.day_count = 1
-
-        # Players mock (roles déjà attribués, mais affichés seulement si mort)
-        self.players = []
-        for i in range(num_players):
-            self.players.append({
-                "name": f"IA_{i+1}",
-                "alive": True,
-                "role": "villageois" if i < max(1, num_players // 4) else "loup",  # juste pour tester
-                "note": 0
-            })
+        # Engine (game logic)
+        self.engine = GameEngine(num_players)
 
         # Widgets
         self.chat = ChatBox(self.chat_rect, self.font)
-        self.player_list = PlayerListPanel(self.list_rect, self.font, self.small_font, self.players)
+        self.player_list = PlayerListPanel(self.list_rect, self.font, self.small_font, self._players_view())
 
-        # Seed test messages
-        self._seed_test_messages()
+        # Vote button handler
+        self.player_list.on_vote = self._on_vote_selected
 
-    # Adds some initial test messages to the chat
-    def _seed_test_messages(self):
-        self.chat.add_message("IA_2", "Bon, on doit trouver les loups. Qui te paraît suspect ?", show_name_ia=True)
-        self.chat.add_message("IA_5", "Perso j'observe. Je n'ai rien de solide.", show_name_ia=True)
-        self.chat.add_message("IA_1", "IA_4 parle peu, ça me gêne.", show_name_ia=True)
+        self.tooltip = Tooltip(self.small_font)
 
-    # Toggles between day and night phases
-    def toggle_phase(self):
-        if self.phase == "Jour":
-            self.phase = "Nuit"
-            # During night, names are hidden
-            self.chat.add_message("IA_?", "…des pas dans l'ombre…", show_name_ia=False)
+        self.continue_btn = Button(
+            rect=(self.info_rect.right - 140, self.info_rect.y + 44, 120, 28),
+            text="Continuer",
+            font=self.small_font,
+            tooltip="Continuer\nAvance la phase du jeu"
+        )
+
+        self.confirm_btn = Button(
+            rect=(self.info_rect.right - 140, self.info_rect.y + 44, 120, 28),
+            text="Confirmer",
+            font=self.small_font,
+            tooltip="Confirmer le vote\nÉlimine la cible sélectionnée"
+        )
+
+        # Currently selected vote index
+        self.selected_vote_idx = None
+
+        # Store number of players for end screen
+        self.num_players = num_players
+
+        # Initial chat messages for day start
+        for ev in self.engine.start_day():
+            self.chat.add_message(ev.name_ia, ev.text, ev.show_name_ia)
+        
+        self._update_vote_buttons_visibility()
+        self._update_controls()
+
+    # Updates the game state
+    def _check_game_over(self):
+        winner = self.engine.get_winner()
+        if winner is None:
+            return False
+
+        # Retrieve wolves information
+        wolves = self.engine.all_wolves_names()
+        found = self.engine.found_wolves_list()
+
+        if winner == "village":
+            self.app.set_screen(VictoryScreen(self.app, self.num_players, wolves, found))
+            return True
+
+        if winner == "loups":
+            self.app.set_screen(DefeatScreen(self.app, self.num_players, wolves, found))
+            return True
+
+        return False
+
+
+    # Handles vote selection from the player list
+    def _on_vote_selected(self, idx: int):
+        self.selected_vote_idx = idx
+        self._update_controls()
+
+
+    # Updates control states based on game phase
+    def _update_controls(self):
+        self.player_list.show_vote_buttons = (self.engine.phase == "JourVote")
+
+        # Vote phase controls update
+        if self.engine.phase == "JourVote":
+            # Check if a selection has been made
+            has_selection = self.selected_vote_idx is not None
+
+            self.confirm_btn.enabled = has_selection
+            self.confirm_btn.tooltip = (
+                "Confirmer le vote\nÉlimine la cible sélectionnée"
+                if has_selection
+                else "Sélectionne une cible d'abord"
+            )
+
+            # Update selected index in player list
+            self.player_list.selected_vote_index = self.selected_vote_idx
         else:
-            self.phase = "Jour"
-            self.day_count += 1
-            self.chat.add_message("IA_3", "Nouveau jour. On récapitule ?", show_name_ia=True)
+            # Reset the selection outside of vote phase
+            self.selected_vote_idx = None
+            self.player_list.selected_vote_index = None
+            self.confirm_btn.enabled = False
 
-    # Kills a player by index (for testing)
-    def kill_player(self, index: int):
-        if 0 <= index < len(self.players):
-            self.players[index]["alive"] = False
+    # Update vote buttons visibility (Day 2+ only)
+    def _update_vote_buttons_visibility(self):
+        self.player_list.show_vote_buttons = (self.engine.phase == "JourVote")
+
+    # Handles vote button clicks
+    def _on_vote_clicked(self, idx: int):
+        events = self.engine.cast_vote(idx)
+        for ev in events:
+            self.chat.add_message(ev.name_ia, ev.text, ev.show_name_ia)
+        # Refresh UI after vote
+        self._refresh_ui_players_from_engine()
+        self._update_vote_buttons_visibility()
+
+    # Prepares a view of players for the UI
+    def _players_view(self):
+        view = []
+        for p in self.engine.players:
+            view.append({
+                "name": p.name,
+                "alive": p.alive,
+                "role": p.role,
+                "note": p.note,
+            })
+        return view
+
+    # Syncs modified notes from UI back to the engine
+    def _sync_notes_back_to_engine(self):
+        for p, v in zip(self.engine.players, self.player_list.players):
+            p.note = v["note"]
+
+    # Refreshes the UI player list from the engine state
+    def _refresh_ui_players_from_engine(self):
+        self.player_list.players = self._players_view()
 
     # Handles events for the game screen
     def handle_event(self, event):
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_ESCAPE:
-                self.app.set_screen(SetupScreen(self.app))
+        # Escape to return to setup screen
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            self.app.set_screen(SetupScreen(self.app))
+            return
 
-            # TESTS for meaningful interactions
-            # SPACE : toggle day/night
-            if event.key == pygame.K_SPACE:
-                self.toggle_phase()
+        # Prioritize buttons
+        if self.engine.phase != "JourVote":
+            if self.continue_btn.handle_event(event):
+                events = self.engine.advance()
+                for ev in events:
+                    self.chat.add_message(ev.name_ia, ev.text, ev.show_name_ia)
 
-            # K : kill IA_1 (for testing)
-            if event.key == pygame.K_k:
-                self.kill_player(0)
+                self._refresh_ui_players_from_engine()
+                self._update_controls()
+                if self._check_game_over():
+                    return
+                return 
+        # Vote confirmation
+        else:
+            if self.confirm_btn.handle_event(event):
+                if self.selected_vote_idx is not None:
+                    events = self.engine.cast_vote(self.selected_vote_idx)
+                    for ev in events:
+                        self.chat.add_message(ev.name_ia, ev.text, ev.show_name_ia)
 
-        # Pass event to widgets
+                    self._refresh_ui_players_from_engine()
+                    self._update_controls()
+                    if self._check_game_over():
+                        return
+                return 
+
+        # Handle SPACE for phase toggle (debug)
         self.chat.handle_event(event)
         self.player_list.handle_event(event)
+        self._sync_notes_back_to_engine()
+
 
     # Updates the game screen
     def draw(self, surface):
-        # Background
         surface.fill((15, 15, 18))
 
         # Info panel
         pygame.draw.rect(surface, (55, 55, 62), self.info_rect, border_radius=12)
         pygame.draw.rect(surface, (180, 180, 180), self.info_rect, 2, border_radius=12)
 
-        # Title label
-        title = self.big_font.render(f"{self.phase} {self.day_count}", True, (240, 240, 240))
+        # Phase and day title
+        title = self.big_font.render(f"{self.engine.phase} {self.engine.day_count}", True, (240, 240, 240))
         surface.blit(title, (self.info_rect.x + 14, self.info_rect.y + 10))
 
-        # Hint label
-        hint = "Les IA discutent (SPACE: toggle jour/nuit)" if self.phase == "Jour" else "Noms masqués dans le chat (SPACE: toggle)"
-        hint_label = self.small_font.render(hint, True, (210, 210, 210))
-        surface.blit(hint_label, (self.info_rect.x + 14, self.info_rect.y + 48))
-
-        # Player list panel
+        # Player list
         self.player_list.draw(surface)
 
-        # Chat box
+        # Chat
         self.chat.draw(surface)
 
         # Debug info
-        dbg = self.small_font.render("Debug: SPACE=Jour/Nuit | K=tuer IA_1 | ESC=menu", True, (140, 140, 140))
+        dbg = self.small_font.render("Debug : ESC=menu", True, (140, 140, 140))
         surface.blit(dbg, (self.chat_rect.x + 10, self.chat_rect.bottom - 24))
+
+        # Bouton du moment
+        if self.engine.phase == "JourVote":
+            self.confirm_btn.draw(surface)
+        else:
+            self.continue_btn.draw(surface)
+
+        # Tooltips
+        mx, my = pygame.mouse.get_pos()
+        hover_text = ""
+
+        # priorité : boutons
+        hover_text = hover_text or (self.confirm_btn.get_hover_text((mx, my)) if self.engine.phase == "JourVote" else "")
+        hover_text = hover_text or (self.continue_btn.get_hover_text((mx, my)) if self.engine.phase != "JourVote" else "")
+
+        # puis liste joueurs
+        hover_text = hover_text or self.player_list.get_hover_text((mx, my))
+
+        # affiche
+        self.tooltip.draw(surface, hover_text, (mx, my))
+
+
+# Base class for end screens (victory/defeat)
+class EndScreen(Screen):
+    # Initializes the end screen with title, subtitle, and buttons
+    def __init__(self, app, title: str, subtitle: str, num_players: int, wolves: list[str], found_wolves: list[str]):
+        super().__init__(app)
+        self.title_font = pygame.font.SysFont(None, 72)
+        self.font = pygame.font.SysFont(None, 28)
+
+        # Store number of players
+        self.num_players = num_players
+        self.title = title
+        self.subtitle = subtitle
+
+        # Store wolves information
+        self.wolves = wolves
+        self.found_wolves = set(found_wolves)
+
+
+        # Buttons
+        self.btn_home = Button(
+            rect=(app.w // 2 - 170, app.h // 2 + 90, 160, 50),
+            text="Accueil",
+            font=self.font,
+            tooltip="Retour à l'accueil"
+        )
+
+        self.btn_replay = Button(
+            rect=(app.w // 2 + 10, app.h // 2 + 90, 160, 50),
+            text="Rejouer",
+            font=self.font,
+            tooltip="Rejouer avec le même nombre de joueurs"
+        )
+
+
+    # Handles events for the end screen
+    def handle_event(self, event):
+        if self.btn_home.handle_event(event):
+            self.app.set_screen(SetupScreen(self.app))
+            return
+
+        if self.btn_replay.handle_event(event):
+            self.app.set_screen(GameScreen(self.app, self.num_players))
+            return
+
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            self.app.set_screen(SetupScreen(self.app))
+
+    # Draws the end screen
+    def draw(self, surface):
+        surface.fill((15, 15, 18))
+
+        cx = self.app.w // 2
+
+        # Title
+        t = self.title_font.render(self.title, True, (240, 240, 240))
+        surface.blit(t, t.get_rect(center=(cx, self.app.h // 2 - 160)))
+
+        # Subtitle
+        s = self.font.render(self.subtitle, True, (200, 200, 200))
+        surface.blit(s, s.get_rect(center=(cx, self.app.h // 2 - 120)))
+
+        # Wolves panel
+        panel_w = 520
+        panel_h = 150
+        panel_rect = pygame.Rect(cx - panel_w // 2, self.app.h // 2 - 95, panel_w, panel_h)
+
+        pygame.draw.rect(surface, (25, 25, 30), panel_rect, border_radius=14)
+        pygame.draw.rect(surface, (180, 180, 180), panel_rect, 2, border_radius=14)
+
+        # Header in panel
+        label = self.font.render("Loups :", True, (230, 230, 230))
+        surface.blit(label, (panel_rect.x + 18, panel_rect.y + 14))
+
+        # Found count
+        found_count = sum(1 for w in self.wolves if w in self.found_wolves)
+        total = len(self.wolves)
+        count_text = self.font.render(f"Trouvés : {found_count}/{total}", True, (190, 190, 190))
+        surface.blit(count_text, (panel_rect.right - 18 - count_text.get_width(), panel_rect.y + 14))
+
+        # Pills layout
+        x = panel_rect.x + 18
+        y = panel_rect.y + 54
+        max_x = panel_rect.right - 18
+        row_gap = 10
+        col_gap = 10
+
+        # Draw each wolf name as a pill
+        for name in self.wolves:
+            text = self.font.render(name, True, (235, 235, 235))
+            pad_x, pad_y = 14, 8
+            pill_w = text.get_width() + 2 * pad_x
+            pill_h = text.get_height() + 2 * pad_y
+
+            # wrap
+            if x + pill_w > max_x:
+                x = panel_rect.x + 18
+                y += pill_h + row_gap
+
+            pill = pygame.Rect(x, y, pill_w, pill_h)
+
+            # Background
+            pygame.draw.rect(surface, (30, 30, 34), pill, border_radius=12)
+
+            # Border color
+            if name in self.found_wolves:
+                border = (230, 80, 80)
+                thick = 3
+            else:
+                border = (130, 130, 130)
+                thick = 2
+
+            pygame.draw.rect(surface, border, pill, thick, border_radius=12)
+
+            surface.blit(text, (pill.x + pad_x, pill.y + pad_y))
+
+            x += pill_w + col_gap
+
+        # Buttons draw
+        self.btn_home.draw(surface)
+        self.btn_replay.draw(surface)
+
+
+# Victory screen subclass
+class VictoryScreen(EndScreen):
+    def __init__(self, app, num_players: int, wolves: list[str], found_wolves: list[str]):
+        super().__init__(
+            app,
+            title = "VICTOIRE !",
+            subtitle = "Tous les loups ont été éliminés.",
+            num_players = num_players,
+            wolves = wolves,
+            found_wolves = found_wolves
+        )
+
+
+# Defeat screen subclass
+class DefeatScreen(EndScreen):
+    def __init__(self, app, num_players: int, wolves: list[str], found_wolves: list[str]):
+        super().__init__(
+            app,
+            title = "DÉFAITE…",
+            subtitle = "Les loups ont pris le contrôle du village.",
+            num_players = num_players,
+            wolves = wolves,
+            found_wolves = found_wolves
+        )
