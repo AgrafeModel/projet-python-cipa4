@@ -1,2 +1,10 @@
+# Main dependencies for the project
 pygame>=2.5.0
 pytest>=8.0.0
+
+# AI-related dependencies
+pettingzoo>=1.24.0
+gymnasium>=0.29.0
+supersuit>=3.9.0
+stable-baselines3>=2.3.0
+numpy>=1.26.0

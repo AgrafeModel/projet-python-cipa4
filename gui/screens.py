@@ -122,12 +122,32 @@ class GameScreen(Screen):
         # Store number of players for end screen
         self.num_players = num_players
 
+        self.pending_events = [] # events to display
+        self.msg_delay = 0.55 # seconds between messages
+        self._msg_timer = 0.0  # timer for message display
+
         # Initial chat messages for day start
-        for ev in self.engine.start_day():
-            self.chat.add_message(ev.name_ia, ev.text, ev.show_name_ia)
+        events = self.engine.start_day()
+        self._enqueue_events(events)
         
         self._update_vote_buttons_visibility()
         self._update_controls()
+
+    # Updates the game screen
+    def update(self, dt: float):
+        # Display pending chat messages over time
+        if self.pending_events:
+            self._msg_timer += dt
+
+            # Show next message if timer exceeds delay
+            if self._msg_timer >= self.msg_delay:
+                self._msg_timer = 0.0
+                ev = self.pending_events.pop(0)
+                self.chat.add_message(ev.name_ia, ev.text, ev.show_name_ia)
+
+    # Enqueues events to be displayed in the chat
+    def _enqueue_events(self, events):
+        self.pending_events.extend(events)
 
     # Updates the game state
     def _check_game_over(self):
@@ -187,8 +207,10 @@ class GameScreen(Screen):
     # Handles vote button clicks
     def _on_vote_clicked(self, idx: int):
         events = self.engine.cast_vote(idx)
-        for ev in events:
-            self.chat.add_message(ev.name_ia, ev.text, ev.show_name_ia)
+
+        # Enqueue resulting events
+        self._enqueue_events(events)
+
         # Refresh UI after vote
         self._refresh_ui_players_from_engine()
         self._update_vote_buttons_visibility()
@@ -224,9 +246,14 @@ class GameScreen(Screen):
         # Prioritize buttons
         if self.engine.phase != "JourVote":
             if self.continue_btn.handle_event(event):
+                if self.pending_events:
+                    while self.pending_events:
+                        ev = self.pending_events.pop(0)
+                        self.chat.add_message(ev.name_ia, ev.text, ev.show_name_ia)
+                    return
+
                 events = self.engine.advance()
-                for ev in events:
-                    self.chat.add_message(ev.name_ia, ev.text, ev.show_name_ia)
+                self._enqueue_events(events)
 
                 self._refresh_ui_players_from_engine()
                 self._update_controls()
@@ -238,8 +265,7 @@ class GameScreen(Screen):
             if self.confirm_btn.handle_event(event):
                 if self.selected_vote_idx is not None:
                     events = self.engine.cast_vote(self.selected_vote_idx)
-                    for ev in events:
-                        self.chat.add_message(ev.name_ia, ev.text, ev.show_name_ia)
+                    self._enqueue_events(events)
 
                     self._refresh_ui_players_from_engine()
                     self._update_controls()

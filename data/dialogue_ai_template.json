@@ -1,0 +1,148 @@
+{
+  "common": {
+    "connectors": ["Franchement,", "Honnêtement,", "Perso,", "Bon,", "Ok,", "Sincèrement,", "À chaud,", "De mon point de vue,"],
+    "softeners": ["un peu", "plutôt", "vraiment", "assez", "clairement", "franchement", "grave", "pas mal"],
+    "endings": ["", ".", "…", " !", " ?"]
+  },
+  "villageois": {
+    "accuse": [
+      "{c} je trouve {target} {s} suspect{e}",
+      "{c} {target} me paraît {s} louche{e}",
+      "{c} je pense que {target} cache quelque chose{e}",
+      "{c} {target} change de version, ça fait {s} peur{e}",
+      "{c} {target} évite les détails, c'est {s} bizarre{e}",
+      "{c} je vois {target} comme le meilleur candidat aujourd'hui{e}",
+      "{c} {target} se place {s} trop bien dans la discussion{e}",
+      "{c} j'ai l'impression que {target} manipule le groupe{e}",
+      "{c} {target} accuse beaucoup mais n'apporte rien de concret{e}",
+      "{c} {target} essaie {s} de se faire oublier{e}"
+    ],
+    "defend": [
+      "{c} je ne vois rien de solide contre {target}{e}",
+      "{c} {target} me paraît {s} clean, je ne comprends pas l'acharnement{e}",
+      "{c} on a {s} zéro preuve, alors calmez-vous sur {target}{e}",
+      "{c} {target} a un comportement normal, je ne le/la mets pas en priorité{e}",
+      "{c} pour l'instant je mets {target} de côté, rien de vraiment incriminant{e}",
+      "{c} {target} a posé des questions pertinentes, ça me rassure{e}",
+      "{c} ça ressemble {s} à un faux débat, et {target} en prend plein la tête{e}",
+      "{c} si {target} était loup, je pense qu'il/elle jouerait autrement{e}",
+      "{c} j'entends vos doutes, mais {target} ne me semble pas dangereux{e}",
+      "{c} je préfère garder {target} en vie pour avoir plus d'infos{e}"
+    ],
+    "question": [
+      "{c} {target}, tu peux expliquer ton raisonnement{e}",
+      "{c} {target}, tu te bases sur quoi exactement{e}",
+      "{c} {target}, pourquoi tu vises cette personne et pas une autre{e}",
+      "{c} {target}, tu as remarqué quoi de concret{e}",
+      "{c} {target}, tu peux résumer ton point de vue en une phrase{e}",
+      "{c} {target}, qu'est-ce qui te rend si sûr(e){e}",
+      "{c} {target}, tu avais déjà cette idée avant ou c'est nouveau{e}",
+      "{c} {target}, t'as un exemple précis à donner{e}",
+      "{c} {target}, tu penses quoi de la piste alternative{e}",
+      "{c} {target}, si tu te trompes, on fait quoi ensuite{e}"
+    ],
+    "hedge": [
+      "{c} je n'ai rien de certain, j'observe{e}",
+      "{c} c'est {s} trop tôt pour trancher, j'attends des éléments{e}",
+      "{c} je suis partagé(e), tout le monde peut sembler louche{e}",
+      "{c} je note des incohérences, mais je ne veux pas me précipiter{e}",
+      "{c} pour l'instant je garde mes doutes, ça peut venir de n'importe qui{e}",
+      "{c} j'essaie de recouper, mais c'est {s} flou{e}",
+      "{c} j'ai un feeling, mais ça ne vaut pas une accusation{e}",
+      "{c} je préfère voir comment les gens réagissent aux questions{e}",
+      "{c} je surveille surtout les retournements d'avis{e}",
+      "{c} je ne suis pas convaincu(e) par les arguments du moment{e}"
+    ],
+    "agree": [
+      "{c} je suis {s} d'accord avec {target}{e}",
+      "{c} {target} marque un point, ça se tient{e}",
+      "{c} oui, ce que dit {target} est cohérent{e}",
+      "{c} je valide la piste de {target}, ça me paraît logique{e}",
+      "{c} {target} met le doigt sur un détail important{e}",
+      "{c} je pense comme {target}, ça ressemble à une bonne lecture{e}",
+      "{c} je suis {s} aligné(e) avec {target}, continuons là-dessus{e}",
+      "{c} {target} a raison de poser cette question{e}",
+      "{c} je suis {s} rassuré(e) par l'analyse de {target}{e}",
+      "{c} ok, {target} a réussi à me convaincre sur ce point{e}"
+    ]
+  },
+  "loup": {
+    "accuse": [
+      "{c} {target} est {s} suspect{e}, ça saute aux yeux{e}",
+      "{c} on perd du temps, {target} est {s} louche{e}{e}",
+      "{c} {target} joue {s} trop safe, c'est inquiétant{e}",
+      "{c} {target} se contredit, je n'y crois pas une seconde{e}",
+      "{c} {target} essaie {s} de contrôler la discussion{e}",
+      "{c} {target} sent {s} le mauvais plan, je vote contre{e}",
+      "{c} {target} cherche un bouc émissaire, ça pue{e}",
+      "{c} si on épargne {target}, on va le regretter{e}",
+      "{c} {target} est {s} trop à l'aise pour être honnête{e}",
+      "{c} je pense que {target} cache son jeu depuis le début{e}"
+    ],
+    "deflect": [
+      "{c} on parle {s} trop de moi, regardez plutôt {target}{e}",
+      "{c} c'est marrant, {target} accuse beaucoup mais évite les retours{e}",
+      "{c} {target} change de cible à chaque minute, ça me dérange{e}",
+      "{c} au lieu de tourner en rond, focalisez-vous sur {target}{e}",
+      "{c} {target} met la pression, c'est souvent une tactique{e}",
+      "{c} si {target} est innocent(e), pourquoi autant de contrôle{e}",
+      "{c} j'ai l'impression que {target} fabrique une histoire{e}",
+      "{c} {target} se cache derrière des généralités, c'est pratique{e}",
+      "{c} {target} fait diversion avec des détails, ça ne m'inspire pas confiance{e}",
+      "{c} on va se faire avoir si on ignore {target}{e}"
+    ],
+    "hedge": [
+      "{c} je reste prudent, rien n'est sûr{e}",
+      "{c} on manque {s} d'infos, mais certains détails me dérangent{e}",
+      "{c} je préfère attendre un peu avant de conclure{e}",
+      "{c} c'est {s} difficile à lire aujourd'hui, je temporise{e}",
+      "{c} je ne veux pas lancer une accusation sans base{e}",
+      "{c} je garde ça en tête, mais je ne suis pas catégorique{e}",
+      "{c} pour l'instant je me contente d'observer les réactions{e}",
+      "{c} je n'ai pas de preuve, juste une impression{e}",
+      "{c} je note les incohérences, on verra si ça se confirme{e}",
+      "{c} on devrait poser des questions avant de voter à l'aveugle{e}"
+    ],
+    "agree": [
+      "{c} je suis {s} d'accord avec {target}{e}",
+      "{c} {target} a raison sur ce point{e}",
+      "{c} oui, l'argument de {target} se tient{e}",
+      "{c} je valide ce que dit {target}, ça paraît logique{e}",
+      "{c} {target} soulève un bon détail{e}",
+      "{c} ok, {target} m'a convaincu sur cette partie{e}",
+      "{c} je pense comme {target}, continuons dans cette direction{e}",
+      "{c} {target} pose les bonnes questions{e}",
+      "{c} je suis {s} aligné avec {target}{e}",
+      "{c} ça me semble cohérent avec l'analyse de {target}{e}"
+    ]
+  },
+  "system": {
+    "day_start": [
+      "Début du Jour {day}.",
+      "Le soleil se lève : Jour {day}.",
+      "Jour {day} commence. Écoutez bien les discussions.",
+      "Nouveau jour (Jour {day}). Les tensions montent…"
+    ],
+    "vote_start": [
+      "Vote : sélectionne une IA vivante (bouton bleu) puis confirme.",
+      "Phase de vote : choisis une cible, puis confirme.",
+      "Le village doit décider : sélectionne puis confirme."
+    ],
+    "night_fall": [
+      "La nuit tombe…",
+      "…des pas dans l'ombre…",
+      "La discussion s'éteint, la nuit commence.",
+      "Des silhouettes bougent dans le noir…"
+    ],
+    "morning_dead": [
+      "Au matin, on retrouve {name} mort.",
+      "{name} n'a pas survécu à la nuit.",
+      "Le village se réveille : {name} a été tué."
+    ],
+    "morning_none": [
+      "Au matin, personne n'est mort…",
+      "Miracle : tout le monde est vivant ce matin.",
+      "La nuit a été calme… pour une fois."
+    ]
+  }
+}

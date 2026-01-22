@@ -12,6 +12,13 @@ from typing import List, Optional
 
 from game.structure_ai import Player
 
+# Imports needed for AI agents
+from ai.agent import Agent, AgentConfig, load_templates
+from ai.rules import PublicState
+
+# Deque for recent templates tracking (to avoid repetitions)
+from collections import deque
+
 # Data class for chat events
 @dataclass
 class ChatEvent:
@@ -39,6 +46,46 @@ class GameEngine:
         # Track found wolves' names
         self.found_wolves_names: set[str] = set()
 
+        # Create AI agents for each player
+        self.templates = load_templates("data/dialogue_ai_template.json")
+        self.agents = {}
+
+        # Recent templates used for diversity (to avoid repetitions)
+        self.recent_templates_global = deque(maxlen=80)
+        self.recent_templates_by_cat = {}
+
+        # Recent messages for context (to avoid repetition with the same message)
+        self.recent_messages = deque(maxlen=60)
+
+        # Initialize agents
+        for p in self.players:
+            # Create agent configuration
+            cfg = AgentConfig(name=p.name, role=p.role)
+
+            # Use different seed for each agent for variability
+            self.agents[p.name] = Agent(cfg, self.templates, seed=self.rng.randrange(1_000_000))
+        # Public chat history
+        self.public_chat_history: list[tuple[str, str]] = []
+
+    # Picks a template without recent repetitions
+    def _pick_template_no_repeat(self, category: str, templates: list[str]) -> str:
+        # initialize recent tracking for category if needed
+        if category not in self.recent_templates_by_cat:
+            self.recent_templates_by_cat[category] = deque(maxlen=25)
+
+        recent_cat = self.recent_templates_by_cat[category]
+        recent_global = self.recent_templates_global
+
+        # filter candidates not in recent lists
+        candidates = [t for t in templates if t not in recent_cat and t not in recent_global]
+        if not candidates:
+            candidates = [t for t in templates if t not in recent_cat] or templates
+
+        # Choose one and update recent lists
+        chosen = self.rng.choice(candidates)
+        recent_cat.append(chosen)
+        recent_global.append(chosen)
+        return chosen
 
     # Creates players with assigned roles
     def _create_players(self, num_players: int) -> List[Player]:
@@ -91,31 +138,40 @@ class GameEngine:
         p.alive = False
         p.note = 0 # reset note on death
 
-    # Generates random day discussion messages
-    def _generate_day_discussion(self, n_messages: int = 8) -> List[ChatEvent]:
-        alive = self.alive_indexes()
-        if not alive:
-            return [ChatEvent("Système", "Plus personne n'est vivant…", True)]
+    # Generates day discussion messages
+    def _generate_day_discussion(self, n_messages: int = 10) -> list[ChatEvent]:
+        alive_names = [p.name for p in self.players if p.alive]
 
-        events: List[ChatEvent] = []
-        templates = [
-            "Je trouve que {x} est bizarre.",
-            "{x} parle peu, ça m'inquiète.",
-            "On n'a pas assez d'infos… je surveille {x}.",
-            "Pourquoi {x} accuse autant ?",
-            "Je suis d'accord avec {x}.",
-            "On devrait se méfier de {x}.",
-            "Je n'ai rien de solide pour l'instant.",
-        ]
-
+        # Generate messages
+        events: list[ChatEvent] = []
         for _ in range(n_messages):
-            speaker = self.rng.choice(alive)
-            target = self.rng.choice(alive)
-            if target == speaker and len(alive) > 1:
-                target = self.rng.choice([i for i in alive if i != speaker])
+            speaker = self.rng.choice(alive_names)
+            agent = self.agents[speaker]
 
-            text = self.rng.choice(templates).format(x=self.players[target].name)
-            events.append(ChatEvent(self.players[speaker].name, text, True))
+            # create public state for the agent
+            state = PublicState(
+                alive_names=alive_names,
+                chat_history=self.public_chat_history,
+                day=self.day_count
+            )
+
+            agent.observe_public(state)
+
+            # try to avoid repeating the same message recently
+            for _try in range(3):
+                msg = agent.decide_message(state)
+                rendered = f"{speaker}:{msg}"
+                if rendered not in self.recent_messages:
+                    self.recent_messages.append(rendered)
+                    break
+
+            # fallback if still repeating
+            else:
+                msg = agent.decide_message(state)
+
+            # engine records the message
+            self.public_chat_history.append((speaker, msg))
+            events.append(ChatEvent(name_ia=speaker, text=msg, show_name_ia=True))
 
         return events
 
