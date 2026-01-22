@@ -9,9 +9,24 @@
 - Amaury AMRANI : dansunavion
 
 # Commandes utiles
-**Env python** : 
-- Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-- python -m venv .venv
-- .\.venv\Scripts\Activate.ps1
-- python -m pip install --upgrade pip
-- pip install -r requirements.txt
+
+**Env python (Windows - PowerShell)** : 
+
+```bash
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+**Env python (macOS/Linux - Bash/Zsh)** :
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+
+source .venv/bin/activate #pour lancer l'environnement
+```
