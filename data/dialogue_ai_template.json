@@ -54,16 +54,16 @@
       "{c} je ne suis pas convaincu(e) par les arguments du moment{e}"
     ],
     "agree": [
-      "{c} je suis {s} d'accord avec {target}{e}",
-      "{c} {target} marque un point, ça se tient{e}",
-      "{c} oui, ce que dit {target} est cohérent{e}",
-      "{c} je valide la piste de {target}, ça me paraît logique{e}",
-      "{c} {target} met le doigt sur un détail important{e}",
-      "{c} je pense comme {target}, ça ressemble à une bonne lecture{e}",
-      "{c} je suis {s} aligné(e) avec {target}, continuons là-dessus{e}",
-      "{c} {target} a raison de poser cette question{e}",
-      "{c} je suis {s} rassuré(e) par l'analyse de {target}{e}",
-      "{c} ok, {target} a réussi à me convaincre sur ce point{e}"
+      "{c} je suis {s} d'accord avec @{target}{e}",
+      "{c} @{target} marque un point, ça se tient{e}",
+      "{c} oui, ce que dit @{target} est cohérent{e}",
+      "{c} je valide la piste de @{target}, ça me paraît logique{e}",
+      "{c} @{target} met le doigt sur un détail important{e}",
+      "{c} je pense comme @{target}, ça ressemble à une bonne lecture{e}",
+      "{c} je suis {s} aligné(e) avec @{target}, continuons là-dessus{e}",
+      "{c} @{target} a raison de poser cette question{e}",
+      "{c} je suis {s} rassuré(e) par l'analyse de @{target}{e}",
+      "{c} ok, @{target} a réussi à me convaincre sur ce point{e}"
     ]
   },
   "loup": {
