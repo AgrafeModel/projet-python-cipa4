@@ -6,18 +6,20 @@
 
 # Annotations : Security import for forward references
 from __future__ import annotations
+
+import json
 import random
+
+# Deque for recent templates tracking (to avoid repetitions)
+from collections import deque
 from dataclasses import dataclass
 from typing import List, Optional
-
-from game.structure_ai import Player
 
 # Imports needed for AI agents
 from ai.agent import Agent, AgentConfig, load_templates
 from ai.rules import PublicState
+from game.structure_ai import Player
 
-# Deque for recent templates tracking (to avoid repetitions)
-from collections import deque
 
 # Data class for chat events
 @dataclass
@@ -25,6 +27,7 @@ class ChatEvent:
     name_ia: str
     text: str
     show_name_ia: bool
+
 
 # Main game engine class
 class GameEngine:
@@ -37,6 +40,11 @@ class GameEngine:
 
         self.day_count = 1
         self.phase = "JourDiscussion"
+
+        with open("data/ai_names.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        self.ai_names = data["prenoms"]
 
         self.players: List[Player] = self._create_players(num_players)
 
@@ -63,7 +71,9 @@ class GameEngine:
             cfg = AgentConfig(name=p.name, role=p.role)
 
             # Use different seed for each agent for variability
-            self.agents[p.name] = Agent(cfg, self.templates, seed=self.rng.randrange(1_000_000))
+            self.agents[p.name] = Agent(
+                cfg, self.templates, seed=self.rng.randrange(1_000_000)
+            )
         # Public chat history
         self.public_chat_history: list[tuple[str, str]] = []
 
@@ -77,7 +87,9 @@ class GameEngine:
         recent_global = self.recent_templates_global
 
         # filter candidates not in recent lists
-        candidates = [t for t in templates if t not in recent_cat and t not in recent_global]
+        candidates = [
+            t for t in templates if t not in recent_cat and t not in recent_global
+        ]
         if not candidates:
             candidates = [t for t in templates if t not in recent_cat] or templates
 
@@ -89,14 +101,16 @@ class GameEngine:
 
     # Creates players with assigned roles
     def _create_players(self, num_players: int) -> List[Player]:
-        names = [f"IA_{i+1}" for i in range(num_players)]
+        names = self.rng.sample(self.ai_names, num_players)
         num_wolves = max(1, num_players // 4)
 
         roles = ["loup"] * num_wolves + ["villageois"] * (num_players - num_wolves)
         self.rng.shuffle(roles)
 
         # Create Player instances
-        return [Player(name=n, role=r, alive=True, note=0) for n, r in zip(names, roles)]
+        return [
+            Player(name=n, role=r, alive=True, note=0) for n, r in zip(names, roles)
+        ]
 
     # Helpers to get alive player indexes
     def alive_indexes(self) -> List[int]:
@@ -119,7 +133,6 @@ class GameEngine:
         # tri stable pour l'affichage
         return sorted(self.found_wolves_names)
 
-
     # Determines if there is a winner
     def get_winner(self) -> Optional[str]:
         wolves = len(self.alive_wolf_indexes())
@@ -131,12 +144,11 @@ class GameEngine:
             return "loups"
         return None
 
-
     # Kills a player by index
     def kill_player(self, index: int) -> None:
         p = self.players[index]
         p.alive = False
-        p.note = 0 # reset note on death
+        p.note = 0  # reset note on death
 
     # Generates day discussion messages
     def _generate_day_discussion(self, n_messages: int = 10) -> list[ChatEvent]:
@@ -152,7 +164,7 @@ class GameEngine:
             state = PublicState(
                 alive_names=alive_names,
                 chat_history=self.public_chat_history,
-                day=self.day_count
+                day=self.day_count,
             )
 
             agent.observe_public(state)
@@ -185,7 +197,13 @@ class GameEngine:
     # Starts the voting phase
     def start_vote(self) -> List[ChatEvent]:
         self.phase = "JourVote"
-        return [ChatEvent("Système", "Vote : clique sur le bouton bleu d'une IA vivante pour l'éliminer.", True)]
+        return [
+            ChatEvent(
+                "Système",
+                "Vote : clique sur le bouton bleu d'une IA vivante pour l'éliminer.",
+                True,
+            )
+        ]
 
     # Casts a vote to eliminate a player
     def cast_vote(self, target_index: int) -> List[ChatEvent]:
@@ -204,9 +222,14 @@ class GameEngine:
         if target.role == "loup":
             self.found_wolves_names.add(target.name)
 
-
         events: List[ChatEvent] = []
-        events.append(ChatEvent("Système", f"Le village élimine {self.players[target_index].name}.", True))
+        events.append(
+            ChatEvent(
+                "Système",
+                f"Le village élimine {self.players[target_index].name}.",
+                True,
+            )
+        )
 
         # Passe à la nuit directement
         self.phase = "Nuit"
@@ -234,7 +257,9 @@ class GameEngine:
         events: List[ChatEvent] = []
         if self._last_night_victim is not None:
             name = self.players[self._last_night_victim].name
-            events.append(ChatEvent("Système", f"Au matin, on retrouve {name} mort.", True))
+            events.append(
+                ChatEvent("Système", f"Au matin, on retrouve {name} mort.", True)
+            )
         else:
             events.append(ChatEvent("Système", "Au matin, personne n'est mort…", True))
 
