@@ -8,6 +8,7 @@ import pygame
 
 from gui.widgets import Button, Stepper, ChatBox, PlayerListPanel, Tooltip
 from game.engine import GameEngine
+from gui.settings_screen import SettingsScreen
 
 # Base class for all screens
 class Screen:
@@ -48,13 +49,29 @@ class SetupScreen(Screen):
             text="START",
             font=self.font
         )
+        
+        # Settings button
+        self.settings_btn = Button(
+            rect=(app.w // 2 - 120, app.h // 2 + 150, 240, 50),
+            text="Paramètres",
+            font=self.font,
+            tooltip="Accéder aux paramètres (S)"
+        )
 
     # Handles events for the setup screen
     def handle_event(self, event):
+        # Keyboard shortcut for settings
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_TAB:
+            self.app.set_screen(SettingsScreen(self.app, previous_screen=self))
+            return
+        
         self.num_players.handle_event(event)
 
         if self.start_btn.handle_event(event):
             self.app.set_screen(GameScreen(self.app, self.num_players.value))
+        
+        if self.settings_btn.handle_event(event):
+            self.app.set_screen(SettingsScreen(self.app, previous_screen=self))
 
     # Draws the setup screen
     def draw(self, surface):
@@ -68,6 +85,7 @@ class SetupScreen(Screen):
 
         self.num_players.draw(surface)
         self.start_btn.draw(surface)
+        self.settings_btn.draw(surface)
 
 
 # Main game screen
@@ -241,6 +259,9 @@ class GameScreen(Screen):
         # Escape to return to setup screen
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             self.app.set_screen(SetupScreen(self.app))
+            return
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_TAB:
+            self.app.set_screen(SettingsScreen(self.app, previous_screen=self))
             return
 
         # Prioritize buttons
