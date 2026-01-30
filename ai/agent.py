@@ -116,27 +116,25 @@ class Agent:
         role_map = getattr(state, 'role_map', {})
         player_list = ", ".join([f"{name} ({role_map.get(name, '?')})" for name in state.alive_names])
         
-        prompt = f"""Tu es {self.name}, un joueur de Loup-Garou (Werewolf).
-Ton rôle: {self.role}
-
+        prompt = f"""Tu es {self.name}, un joueur intelligent de Loup-Garou.
+Ton rôle VÉRITABLE: {self.role}
 Joueurs vivants: {player_list}
 
 Messages récents:
 {recent_messages}
 
-Joueurs suspects:
+Joueurs que tu suspects (1-5):
 {suspicion_info}
 
-Accusations contre toi:
+Accusations CONTRE toi:
 {accusations_text}
 
-Écris UNE SEULE phrase en français (maximum 20 mots).
-RÈGLES STRICTES:
-- Réponds UNIQUEMENT EN FRANÇAIS
-- PAS de traduction anglaise
-- PAS de parenthèses
-- PAS de guillemets
-- Une seule phrase courte
+INSTRUCTIONS:
+- Si tu es LOUP: défends-toi, cible les villageois innocents, sème le doute
+- Si tu es VILLAGEOIS: accuse les loups, analyse les discours, cherche la vérité
+- Réponds en UNE SEULE phrase (max 18 mots)
+- FRANÇAIS UNIQUEMENT, pas de traduction anglaise
+- Sois stratégique et persuasif, pas bête
 
 Réponse:"""
 
@@ -144,7 +142,7 @@ Réponse:"""
             response = self.ollama_client.generate(
                 prompt=prompt,
                 model=self.ollama_model,
-                options={"temperature": 0.5, "num_predict": 40}
+                options={"temperature": 0.7, "num_predict": 50}
             )
             
             if response and response.response:

@@ -156,6 +156,7 @@ class GameScreen(Screen):
         events = self.engine.resolve_night_and_start_next_day()
         self._enqueue_events(events)
         self._message_generator = self._create_message_generator()
+        self._refresh_ui_players_from_engine()  # Update dead players in UI
         
         self._update_vote_buttons_visibility()
         self._update_controls()
