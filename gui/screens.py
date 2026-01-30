@@ -146,6 +146,10 @@ class GameScreen(Screen):
         
         # Generator for streaming message generation (one at a time from Ollama)
         self._message_generator = None
+        
+        # Discussion phase timer (max 45 seconds for fluent discussion)
+        self._discussion_phase_timer = 0.0
+        self._max_discussion_duration = 45.0  # seconds
 
         # Initial chat messages for day start
         events = self.engine.start_day()
@@ -157,6 +161,12 @@ class GameScreen(Screen):
 
     # Updates the game screen
     def update(self, dt: float):
+        # Track discussion phase duration
+        if self.engine.phase == "JourDiscussion":
+            self._discussion_phase_timer += dt
+        else:
+            self._discussion_phase_timer = 0.0
+        
         # Display pending chat messages over time
         if self.pending_events:
             self._msg_timer += dt
@@ -167,16 +177,20 @@ class GameScreen(Screen):
                 ev = self.pending_events.pop(0)
                 self.chat.add_message(ev.name_ia, ev.text, ev.show_name_ia)
         
-        # Generate next message from Ollama if queue is empty
-        elif self._message_generator:
-            self._msg_timer += dt
-            if self._msg_timer >= self.msg_delay:
-                self._msg_timer = 0.0
-                try:
-                    ev = next(self._message_generator)
-                    self.chat.add_message(ev.name_ia, ev.text, ev.show_name_ia)
-                except StopIteration:
-                    self._message_generator = None
+        # Generate next message from Ollama if queue is empty AND we haven't exceeded time limit
+        elif self._message_generator and self.engine.phase == "JourDiscussion":
+            if self._discussion_phase_timer < self._max_discussion_duration:
+                self._msg_timer += dt
+                if self._msg_timer >= self.msg_delay:
+                    self._msg_timer = 0.0
+                    try:
+                        ev = next(self._message_generator)
+                        self.chat.add_message(ev.name_ia, ev.text, ev.show_name_ia)
+                    except StopIteration:
+                        self._message_generator = None
+            else:
+                # Time's up - stop generating
+                self._message_generator = None
 
     # Enqueues events to be displayed in the chat
     def _enqueue_events(self, events):
@@ -331,6 +345,12 @@ class GameScreen(Screen):
 
                 events = self.engine.advance()
                 self._enqueue_events(events)
+                
+                # Recreate generator if we just started a new day
+                if self.engine.phase == "JourDiscussion":
+                    self._message_generator = self._create_message_generator()
+                else:
+                    self._message_generator = None
 
                 self._refresh_ui_players_from_engine()
                 self._update_controls()
