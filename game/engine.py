@@ -20,6 +20,8 @@ from ai.agent import Agent, AgentConfig, load_templates
 from ai.rules import PublicState
 from game.structure_ai import Player
 
+# TTS
+from game.tts_helper import speak_text
 
 # Data class for chat events
 @dataclass
@@ -185,6 +187,9 @@ class GameEngine:
             self.public_chat_history.append((speaker, msg))
             events.append(ChatEvent(name_ia=speaker, text=msg, show_name_ia=True))
 
+            # ← Lecture audio du message
+            speak_text(msg)
+
         return events
 
     # Starts the day phase with discussion
@@ -192,6 +197,7 @@ class GameEngine:
         self.phase = "JourDiscussion"
         events = [ChatEvent("Système", f"Début du Jour {self.day_count}.", True)]
         events += self._generate_day_discussion(n_messages=8)
+
         return events
 
     # Starts the voting phase

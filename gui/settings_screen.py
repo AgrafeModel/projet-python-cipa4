@@ -1,5 +1,6 @@
 import pygame
 from gui.widgets import Button
+import audio_config
 
 
 # ============================================================================
@@ -105,10 +106,21 @@ class SettingsScreen:
             current_volume = pygame.mixer.music.get_volume()
         except:
             current_volume = 0.5
+
+        slider_width = min(500, app.w - 200)
+        slider_x = (app.w - slider_width) // 2
+        slider_y = app.h // 2 + 75
+
+        self.sound_slider = Slider(
+            rect=(slider_x, slider_y, slider_width, 10),
+            initial_value=0.8,
+            label="Volume de la voix",
+            font=self.font
+        )
         
         slider_width = min(500, app.w - 200)
         slider_x = (app.w - slider_width) // 2
-        slider_y = app.h // 2 - 20
+        slider_y = app.h // 2 - 50
         
         self.volume_slider = Slider(
             rect=(slider_x, slider_y, slider_width, 10),
@@ -118,7 +130,7 @@ class SettingsScreen:
         )
         
         self.back_button = Button(
-            rect=(app.w // 2 - 100, app.h // 2 + 100, 200, 50),
+            rect=(app.w // 2 - 100, app.h // 2 + 175, 200, 50),
             text="Retour",
             font=self.font,
             tooltip="Retourner au menu précédent (TAB)"
@@ -130,12 +142,16 @@ class SettingsScreen:
             return
         
         self.volume_slider.handle_event(event)
+        self.sound_slider.handle_event(event)
         
         try:
             pygame.mixer.music.set_volume(self.volume_slider.value)
+            audio_config.music_volume = self.volume_slider.value
         except:
             pass
         
+        audio_config.voice_volume = self.sound_slider.value
+
         if self.back_button.handle_event(event):
             self._go_back()
     
@@ -166,6 +182,8 @@ class SettingsScreen:
         pygame.draw.rect(surface, (180, 180, 180), panel_rect, 2, border_radius=12)
         
         self.volume_slider.draw(surface)
+
+        self.sound_slider.draw(surface)
         
         self.back_button.draw(surface)
         

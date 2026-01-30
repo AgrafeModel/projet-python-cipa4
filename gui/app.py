@@ -36,6 +36,9 @@ class App:
         
         # Play menu music
         self.play_music("menu")
+
+        self.music_volume = 0.5
+        self.sound_volume = 0.8
     
     def play_music(self, track_name):
         """
