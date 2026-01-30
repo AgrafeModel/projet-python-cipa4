@@ -95,48 +95,72 @@ class Agent:
     
     def _generate_with_ollama(self, state: PublicState, candidates: List[str]) -> Optional[str]:
         """Generate message using Ollama LLM."""
-        # Build context for the LLM
-        recent_messages = "\n".join([f"{speaker}: {text}" for speaker, text in state.chat_history[-5:]])
+        # Build context for the LLM (shorter for faster generation)
+        recent_messages = "\n".join([f"{speaker}: {text}" for speaker, text in state.chat_history[-3:]])
         
         suspicion_info = "\n".join([
             f"- {name}: {sus:.1f}/5"
-            for name, sus in sorted(self.suspicion.items(), key=lambda x: x[1], reverse=True)[:3]
+            for name, sus in sorted(self.suspicion.items(), key=lambda x: x[1], reverse=True)[:2]
         ])
         
-        prompt = f"""You are {self.name}, a {self.role} player in a "Loup-Garou" (Werewolf) game.
+        # Extract accusations against this player from recent messages
+        accusations_against_me = []
+        for speaker, text in state.chat_history[-3:]:
+            if speaker != self.name and self.name.lower() in text.lower():
+                if any(word in text.lower() for word in ["suspect", "louche", "cache", "bizarre", "suspecte", "loup", "mauvais"]):
+                    accusations_against_me.append(f"{speaker}: {text}")
+        
+        accusations_text = "\n".join(accusations_against_me) if accusations_against_me else "(none)"
+        
+        prompt = f"""You are {self.name}, a {self.role} in Werewolf.
 
-Your role: {self.role}
-Your personality: {self.personality}
-Other players: {', '.join(candidates)}
+Recent: {recent_messages}
+Suspicious: {suspicion_info}
+Against you: {accusations_text}
 
-Recent discussion:
-{recent_messages}
+Generate ONE short French sentence (max 20 words). Only French. No quotes.
 
-Your suspicion levels (highest first):
-{suspicion_info}
-
-Generate a SHORT (1-2 sentences) message for the discussion phase. 
-Respond in French. Be strategic - suspect others if you're a villager, defend yourself if you're a wolf.
-Just the message, no explanation."""
+Message:"""
 
         try:
             response = self.ollama_client.generate(
                 prompt=prompt,
                 model=self.ollama_model,
-                options={"temperature": 0.8, "num_predict": 100}
+                options={"temperature": 0.6, "num_predict": 50}
             )
             
             if response and response.response:
                 message = response.response.strip()
-                # Ensure message is not too long
-                if len(message) > 200:
-                    message = message[:200] + "..."
+                
+                # Clean up the message
+                message = message.strip('"\'')
+                if message.startswith('1.') or message.startswith('1)'):
+                    message = message[2:].strip()
+                
+                # Take only first line
+                message = message.split('\n')[0].strip()
+                
+                # Ensure reasonable length
+                if len(message) > 150:
+                    message = message[:150] + "..."
+                
+                # Reject if empty or English
+                if not message or self._is_mostly_english(message):
+                    return None
+                
                 return message
             
             return None
         except Exception as e:
             print(f"❌ Ollama error: {e}")
             return None
+    
+    def _is_mostly_english(self, text: str) -> bool:
+        """Check if text is mostly English (basic heuristic)."""
+        english_words = {"the", "a", "is", "are", "you", "they", "think", "suspect", "that", "but", "and", "or"}
+        words = text.lower().split()
+        english_count = sum(1 for w in words if w in english_words)
+        return english_count > len(words) * 0.5 if words else False
     
     def _generate_from_templates(self, candidates: List[str]) -> str:
         """Generate message using template system (fallback)."""

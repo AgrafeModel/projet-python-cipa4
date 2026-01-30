@@ -143,10 +143,14 @@ class GameScreen(Screen):
         self.pending_events = [] # events to display
         self.msg_delay = 0.55 # seconds between messages
         self._msg_timer = 0.0  # timer for message display
+        
+        # Generator for streaming message generation (one at a time from Ollama)
+        self._message_generator = None
 
         # Initial chat messages for day start
         events = self.engine.start_day()
         self._enqueue_events(events)
+        self._message_generator = self._create_message_generator()
         
         self._update_vote_buttons_visibility()
         self._update_controls()
@@ -162,10 +166,62 @@ class GameScreen(Screen):
                 self._msg_timer = 0.0
                 ev = self.pending_events.pop(0)
                 self.chat.add_message(ev.name_ia, ev.text, ev.show_name_ia)
+        
+        # Generate next message from Ollama if queue is empty
+        elif self._message_generator:
+            self._msg_timer += dt
+            if self._msg_timer >= self.msg_delay:
+                self._msg_timer = 0.0
+                try:
+                    ev = next(self._message_generator)
+                    self.chat.add_message(ev.name_ia, ev.text, ev.show_name_ia)
+                except StopIteration:
+                    self._message_generator = None
 
     # Enqueues events to be displayed in the chat
     def _enqueue_events(self, events):
         self.pending_events.extend(events)
+
+    # Generator that creates messages one at a time (streaming from Ollama)
+    def _create_message_generator(self):
+        """Yields messages one at a time as they're generated from Ollama."""
+        alive_names = [p.name for p in self.engine.players if p.alive]
+        if not alive_names:
+            return
+        
+        # Generate messages one by one (each call to Ollama happens here)
+        for _ in range(4):  # Same as n_messages=4 in engine
+            speaker = self.engine.rng.choice(alive_names)
+            agent = self.engine.agents[speaker]
+            
+            # Create public state
+            from ai.rules import PublicState
+            state = PublicState(
+                alive_names=alive_names,
+                chat_history=self.engine.public_chat_history,
+                day=self.engine.day_count,
+            )
+            
+            agent.observe_public(state)
+            
+            # Generate message (calls Ollama now, not earlier)
+            msg = agent.decide_message(state)
+            
+            # Avoid repeating recently
+            for _try in range(3):
+                rendered = f"{speaker}:{msg}"
+                if rendered not in self.engine.recent_messages:
+                    self.engine.recent_messages.append(rendered)
+                    break
+            else:
+                msg = agent.decide_message(state)
+            
+            # Record in engine
+            self.engine.public_chat_history.append((speaker, msg))
+            
+            # Yield the message as an event
+            from game.engine import ChatEvent
+            yield ChatEvent(name_ia=speaker, text=msg, show_name_ia=True)
 
     # Updates the game state
     def _check_game_over(self):

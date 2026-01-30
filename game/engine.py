@@ -190,9 +190,8 @@ class GameEngine:
     # Starts the day phase with discussion
     def start_day(self) -> List[ChatEvent]:
         self.phase = "JourDiscussion"
-        events = [ChatEvent("Système", f"Début du Jour {self.day_count}.", True)]
-        events += self._generate_day_discussion(n_messages=8)
-        return events
+        # Only return system message - actual messages will be generated on-demand by GameScreen
+        return [ChatEvent("Système", f"Début du Jour {self.day_count}.", True)]
 
     # Starts the voting phase
     def start_vote(self) -> List[ChatEvent]:
