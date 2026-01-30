@@ -152,8 +152,8 @@ class GameScreen(Screen):
         self._max_discussion_duration = 45.0  # seconds
         self._discussion_end_message_shown = False  # avoid showing it multiple times
 
-        # Initial chat messages for day start
-        events = self.engine.start_day()
+        # Start with night phase instead of day discussion (avoid baseless accusations on day 1)
+        events = self.engine.resolve_night_and_start_next_day()
         self._enqueue_events(events)
         self._message_generator = self._create_message_generator()
         
@@ -214,19 +214,23 @@ class GameScreen(Screen):
         if not alive_names:
             return
         
+        # Build role info for context
+        role_map = {p.name: p.role for p in self.engine.players}
+        
         # Generate messages continuously (until stopped by time limit)
         message_count = 0
         while True:  # Infinite loop - stopped by time limit in update()
             speaker = self.engine.rng.choice(alive_names)
             agent = self.engine.agents[speaker]
             
-            # Create public state
+            # Create public state with role info
             from ai.rules import PublicState
             state = PublicState(
                 alive_names=alive_names,
                 chat_history=self.engine.public_chat_history,
                 day=self.engine.day_count,
             )
+            state.role_map = role_map  # Add role info to state
             
             agent.observe_public(state)
             

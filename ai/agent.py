@@ -112,25 +112,47 @@ class Agent:
         
         accusations_text = "\n".join(accusations_against_me) if accusations_against_me else "(none)"
         
-        prompt = f"""You are {self.name}, a {self.role} in Werewolf.
+        # Build player list with roles (if available)
+        role_map = getattr(state, 'role_map', {})
+        player_list = ", ".join([f"{name} ({role_map.get(name, '?')})" for name in state.alive_names])
+        
+        prompt = f"""Tu es {self.name}, un joueur de Loup-Garou (Werewolf).
+Ton rôle: {self.role}
 
-Recent: {recent_messages}
-Suspicious: {suspicion_info}
-Against you: {accusations_text}
+Joueurs vivants: {player_list}
 
-Generate ONE short French sentence (max 20 words). Only French. No quotes.
+Messages récents:
+{recent_messages}
 
-Message:"""
+Joueurs suspects:
+{suspicion_info}
+
+Accusations contre toi:
+{accusations_text}
+
+Écris UNE SEULE phrase en français (maximum 20 mots).
+RÈGLES STRICTES:
+- Réponds UNIQUEMENT EN FRANÇAIS
+- PAS de traduction anglaise
+- PAS de parenthèses
+- PAS de guillemets
+- Une seule phrase courte
+
+Réponse:"""
 
         try:
             response = self.ollama_client.generate(
                 prompt=prompt,
                 model=self.ollama_model,
-                options={"temperature": 0.6, "num_predict": 50}
+                options={"temperature": 0.5, "num_predict": 40}
             )
             
             if response and response.response:
                 message = response.response.strip()
+                
+                # Remove any parenthetical content (often English translations)
+                import re
+                message = re.sub(r'\s*\([^)]*\)', '', message)
                 
                 # Clean up the message
                 message = message.strip('"\'')
