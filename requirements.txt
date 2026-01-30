@@ -19,3 +19,4 @@ gymnasium>=0.29.0
 supersuit>=3.9.0
 stable-baselines3>=2.3.0
 numpy>=1.26.0
+google-generativeai>=0.1.0
