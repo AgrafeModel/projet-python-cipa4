@@ -30,3 +30,11 @@ pip install -r requirements.txt
 
 source .venv/bin/activate #pour lancer l'environnement
 ```
+
+# Installation Ollama
+
+## Installer mistral
+
+dans un premier terminal `ollama serve` pour lancer ollama. Puis dans un second `ollama pull mistral` pour télécharger le modèle de mistral
+
+a tester : ministral

@@ -1,6 +1,17 @@
 # Main dependencies for the project
 pygame>=2.5.0
 pytest>=8.0.0
+pytest-asyncio>=0.21.0
+
+# Web server and WebSocket
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
+python-multipart>=0.0.6
+
+# WebSocket testing
+httpx>=0.25.0
+websockets>=12.0
 
 # AI-related dependencies
 pettingzoo>=1.24.0

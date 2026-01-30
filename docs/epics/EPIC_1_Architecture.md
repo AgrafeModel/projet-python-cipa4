@@ -5,7 +5,7 @@
 **Objectif:** Créer une base solide pour les agents et l'orchestration
 
 **Points d'effort estimés:** 40 points  
-**Statut global:** 🟨 En cours (40% complété)
+**Statut global:** 🟨 En cours (70% complété)
 
 ---
 
@@ -30,20 +30,20 @@ En tant que développeur, je veux initialiser un projet Python avec une structur
 
 ---
 
-### ⬜ US-1.2 | Configurer Ollama et la connexion LLM
+### ✅ US-1.2 | Configurer Ollama et la connexion LLM
 **Points:** 5  
 **Priorité:** 🔴 Critique  
-**Statut:** ❌ À faire
+**Statut:** ✅ Terminée
 
 **Description:**  
 En tant que développeur, je veux configurer la connexion à Ollama pour pouvoir utiliser les modèles LLM localement.
 
 **Critères d'acceptation:**
-- [ ] Client Ollama créé et testé
-- [ ] Gestion des erreurs de connexion
-- [ ] Configuration externalisée (config.py ou .env)
-- [ ] Support de plusieurs modèles
-- [ ] Tests unitaires pour la connexion
+- [x] Client Ollama créé et testé
+- [x] Gestion des erreurs de connexion
+- [x] Configuration externalisée (config.py ou .env)
+- [x] Support de plusieurs modèles
+- [x] Tests unitaires pour la connexion
 
 **Tâches:**
 - Implémenter la classe OllamaClient
@@ -80,20 +80,20 @@ En tant que développeur, je veux configurer un système de logging centralisé 
 
 ---
 
-### ⬜ US-1.4 | Implémenter la communication WebSocket
+### ✅ US-1.4 | Implémenter la communication WebSocket
 **Points:** 6  
 **Priorité:** 🔴 Critique  
-**Statut:** ❌ À faire
+**Statut:** ✅ Terminée
 
 **Description:**  
 En tant qu'architecte, je veux mettre en place un serveur WebSocket pour que les agents et l'interface puissent communiquer en temps réel.
 
 **Critères d'acceptation:**
-- [ ] Serveur WebSocket créé avec asyncio/FastAPI
-- [ ] Gestion des connexions multiples
-- [ ] Messages JSON sérialisés
-- [ ] Gestion des déconnexions
-- [ ] Tests de charge basiques
+- [x] Serveur WebSocket créé avec asyncio/FastAPI
+- [x] Gestion des connexions multiples
+- [x] Messages JSON sérialisés
+- [x] Gestion des déconnexions
+- [x] Tests de charge basiques
 
 **Tâches:**
 - Configurer FastAPI + WebSocket
@@ -135,10 +135,10 @@ En tant que développeur, je veux centraliser toute la configuration du projet p
 | User Story | Statut | Points |
 |------------|--------|--------|
 | US-1.1 | ✅ | 3 |
-| US-1.2 | ❌ | 5 |
+| US-1.2 | ✅ | 5 |
 | US-1.3 | ⚠️ | 4 |
-| US-1.4 | ❌ | 6 |
+| US-1.4 | ✅ | 6 |
 | US-1.5 | ⚠️ | 4 |
-| **Total** | **40%** | **22/40** |
+| **Total** | **70%** | **33/40** |
 
 **Légende:** ✅ Terminée | ⚠️ Partielle | ❌ À faire | 🟨 En cours
