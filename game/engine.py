@@ -38,8 +38,8 @@ class GameEngine:
         # Random generator with optional seed for reproducibility
         self.rng = random.Random(seed)
 
-        self.day_count = 1
-        self.phase = "JourDiscussion"
+        self.day_count = 0  # Will be incremented to 1 by resolve_night_and_start_next_day()
+        self.phase = "Nuit"  # Start with night phase to avoid baseless accusations
 
         with open("data/ai_names.json", "r", encoding="utf-8") as f:
             data = json.load(f)
