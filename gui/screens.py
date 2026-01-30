@@ -150,6 +150,7 @@ class GameScreen(Screen):
         # Discussion phase timer (max 45 seconds for fluent discussion)
         self._discussion_phase_timer = 0.0
         self._max_discussion_duration = 45.0  # seconds
+        self._discussion_end_message_shown = False  # avoid showing it multiple times
 
         # Initial chat messages for day start
         events = self.engine.start_day()
@@ -166,6 +167,7 @@ class GameScreen(Screen):
             self._discussion_phase_timer += dt
         else:
             self._discussion_phase_timer = 0.0
+            self._discussion_end_message_shown = False
         
         # Display pending chat messages over time
         if self.pending_events:
@@ -189,8 +191,17 @@ class GameScreen(Screen):
                     except StopIteration:
                         self._message_generator = None
             else:
-                # Time's up - stop generating
-                self._message_generator = None
+                # Time's up - stop generating and show system message
+                if not self._discussion_end_message_shown:
+                    self._discussion_end_message_shown = True
+                    self._message_generator = None
+                    # Add "discussion time elapsed" message
+                    from game.engine import ChatEvent
+                    self.chat.add_message(
+                        "Système",
+                        "Temps de discussion écoulé, passons au vote!",
+                        True
+                    )
 
     # Enqueues events to be displayed in the chat
     def _enqueue_events(self, events):
@@ -203,8 +214,9 @@ class GameScreen(Screen):
         if not alive_names:
             return
         
-        # Generate messages one by one (each call to Ollama happens here)
-        for _ in range(4):  # Same as n_messages=4 in engine
+        # Generate messages continuously (until stopped by time limit)
+        message_count = 0
+        while True:  # Infinite loop - stopped by time limit in update()
             speaker = self.engine.rng.choice(alive_names)
             agent = self.engine.agents[speaker]
             
@@ -232,6 +244,8 @@ class GameScreen(Screen):
             
             # Record in engine
             self.engine.public_chat_history.append((speaker, msg))
+            
+            message_count += 1
             
             # Yield the message as an event
             from game.engine import ChatEvent
@@ -349,6 +363,7 @@ class GameScreen(Screen):
                 # Recreate generator if we just started a new day
                 if self.engine.phase == "JourDiscussion":
                     self._message_generator = self._create_message_generator()
+                    self._discussion_end_message_shown = False
                 else:
                     self._message_generator = None
 
