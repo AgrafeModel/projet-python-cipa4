@@ -192,17 +192,15 @@ class GameScreen(Screen):
                     except StopIteration:
                         self._message_generator = None
             else:
-                # Time's up - stop generating and show system message
+                # Time's up - stop generating and transition to vote phase
                 if not self._discussion_end_message_shown:
                     self._discussion_end_message_shown = True
                     self._message_generator = None
-                    # Add "discussion time elapsed" message
-                    from game.engine import ChatEvent
-                    self.chat.add_message(
-                        "Système",
-                        "Temps de discussion écoulé, passons au vote!",
-                        True
-                    )
+                    # Transition to vote phase and get resulting events
+                    events = self.engine.start_vote()
+                    self._enqueue_events(events)
+                    self._update_vote_buttons_visibility()
+                    self._update_controls()
 
     # Enqueues events to be displayed in the chat
     def _enqueue_events(self, events):
