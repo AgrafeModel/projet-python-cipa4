@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 import os
 from openai import OpenAI
 from openrouter import dataclass
-load_dotenv()
+import json
 
 
 @dataclass
@@ -55,8 +55,9 @@ class OpenRouterClient:
         responseraw = self.client.chat.completions.create(
             model=self.model,
             messages=messages,
-            max_tokens=max_tokens,
+
             temperature=temperature,
+
         )
 
         response_text = responseraw.choices[0].message.content
@@ -71,12 +72,29 @@ class ResponseFormat:
     action: str
     reasoning: str
     dialogue: str
+    cible:str
 
 def parse_response(response_text: str) -> ResponseFormat:
-    import json
-    data = json.loads(response_text)
-    return ResponseFormat(
-        action=data["action"],
-        reasoning=data["reasoning"],
-        dialogue=data["dialogue"]
-    )
+    try:
+        ## if formated as markdown : ```json ... ```
+
+
+        if response_text.startswith("```json"):
+            start = response_text.find("{")
+            end = response_text.rfind("}") + 1
+            json_text = response_text[start:end]
+            data = json.loads(json_text)
+        else:
+            data = json.loads(response_text)
+
+
+        dialogue = data["dialogue"] if "dialogue" in data else ""
+        cible = data["cible"] if "cible" in data else ""
+        return ResponseFormat(
+            action=data["action"],
+            reasoning=data["reasoning"],
+            dialogue= dialogue,
+            cible= cible,
+        )
+    except (json.JSONDecodeError, KeyError) as e:
+        raise ValueError(f"Failed to parse response: {e}. Response text: {response_text}")

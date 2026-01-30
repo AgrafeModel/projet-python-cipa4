@@ -49,7 +49,7 @@ class SetupScreen(Screen):
             text="START",
             font=self.font
         )
-        
+
         # Settings button
         self.settings_btn = Button(
             rect=(app.w // 2 - 120, app.h // 2 + 150, 240, 50),
@@ -64,12 +64,12 @@ class SetupScreen(Screen):
         if event.type == pygame.KEYDOWN and event.key == pygame.K_TAB:
             self.app.set_screen(SettingsScreen(self.app, previous_screen=self))
             return
-        
+
         self.num_players.handle_event(event)
 
         if self.start_btn.handle_event(event):
             self.app.set_screen(GameScreen(self.app, self.num_players.value))
-        
+
         if self.settings_btn.handle_event(event):
             self.app.set_screen(SettingsScreen(self.app, previous_screen=self))
 
@@ -147,7 +147,7 @@ class GameScreen(Screen):
         # Initial chat messages for day start
         events = self.engine.start_day()
         self._enqueue_events(events)
-        
+
         self._update_vote_buttons_visibility()
         self._update_controls()
 
@@ -280,7 +280,7 @@ class GameScreen(Screen):
                 self._update_controls()
                 if self._check_game_over():
                     return
-                return 
+                return
         # Vote confirmation
         else:
             if self.confirm_btn.handle_event(event):
@@ -292,7 +292,7 @@ class GameScreen(Screen):
                     self._update_controls()
                     if self._check_game_over():
                         return
-                return 
+                return
 
         # Handle SPACE for phase toggle (debug)
         self.chat.handle_event(event)
