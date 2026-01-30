@@ -57,6 +57,12 @@ class GameContextManager:
             global_context_element = global_context[i]
             next_global_id = global_context[i+1] if i + 1 < len(global_context) else {"id": float('inf')}
             res += str(global_context_element["content"])
+            if("Période:Nuit" in global_context_element["content"]):
+                while True:
+                    # skip until the next période:nuit
+                    next_global_id = global_context[i+1] if i + 1 < len(global_context) else {"id": float('inf')}
+                    if("Période:Jour" in global_context_element["content"]):
+                        break
 
             # Get all player context elements until the id of the next global context
             while pPtr < len(player_context):

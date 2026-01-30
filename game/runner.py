@@ -35,10 +35,14 @@ class GameRunner:
         self.ai_names = data["prenoms"]
 
         for i in range(player_count):
-            name = self.ai_names[i % len(self.ai_names)]
+            name = self.ai_names[random.randint(0,60)]
             role = self.roles[i % len(self.roles)]
             agent = Agent(name, role)
             self.agents.append(agent)
+
+        print("Joueurs dans la partie:")
+        for agent in self.agents:
+            print(agent.name)
 
     def get_players_alive(self):
         r = []
