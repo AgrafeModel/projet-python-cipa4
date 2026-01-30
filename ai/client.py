@@ -21,29 +21,43 @@ class OpenRouterClient:
         )
         self.model = config.model
 
-    def load_master_prompt(self, file_path):
-           with open(file_path, "r", encoding="utf-8") as file:
-               return file.read()
+
+
+    # Method for streaming chat completion using the OpenRouter API
+    # This method yields chunks of text as they are received
+    # from the API
+    # Parameters:
+    # - messages: List of message dicts for the chat completion
+    # - max_tokens: Maximum number of tokens to generate
+    # - temperature: Sampling temperature for generation
+    # - on_chunk: Optional callback function to handle each chunk of text
+    def chat_completion_stream(self, messages, max_tokens=512, temperature=0.7, on_chunk=None):
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            stream=True,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+        buffer = ""
+        for chunk in response:
+            delta = chunk.choices[0].delta
+            if hasattr(delta, 'content') and delta.content is not None:
+                buffer += delta.content
+                if on_chunk:
+                    on_chunk(delta.content)
+        return buffer
 
 
 
     # Method for chat completion using the OpenRouter API
     def chat_completion_player(self, messages, max_tokens=512, temperature=0.7) :
-
-        master_prompt = self.load_master_prompt("prompts/master.txt")
-
-        # Add the master prompt as a system message
-        system_message = {"role": "system", "content": master_prompt}
-        messages.insert(0, system_message)
-
-
         responseraw = self.client.chat.completions.create(
             model=self.model,
             messages=messages,
             max_tokens=max_tokens,
             temperature=temperature,
         )
-
 
         response_text = responseraw.choices[0].message.content
         if response_text is None:
@@ -52,10 +66,8 @@ class OpenRouterClient:
         return formated_response
 
 
-
 @dataclass
 class ResponseFormat:
-    role: str
     action: str
     reasoning: str
     dialogue: str
@@ -64,25 +76,7 @@ def parse_response(response_text: str) -> ResponseFormat:
     import json
     data = json.loads(response_text)
     return ResponseFormat(
-        role=data["role"],
         action=data["action"],
         reasoning=data["reasoning"],
         dialogue=data["dialogue"]
     )
-
-
-# Configuration du client
-api_key = os.getenv("OPENROUTER_API_KEY")
-if api_key is None:
-    raise ValueError("OPENROUTER_API_KEY environment variable is not set")
-config = OpenRouterClientConfig(api_key=api_key)
-client = OpenRouterClient(config)
-
-# Messages pour le contexte du jeu
-messages = [
-{"role": "user", "content": "Tu es un Loup-Garou. Comment comptes-tu convaincre les autres que tu es innocent ?"},
-]
-
-# Appel à l'API
-response = client.chat_completion_player(messages)
-print(response)

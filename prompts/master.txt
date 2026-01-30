@@ -85,7 +85,6 @@ Comportement par Rôle**
 Toutes tes réponses doivent respecter le format JSON suivant :
 
 {
-  "role": "string", // Le rôle que tu joues (ex. "Villageois", "Loup-Garou", "Voyante", etc.)
   "action": "string", // L'action que tu proposes ou décris. Uniquement parmis ces actions : "accuser", "défendre", "voter", "utiliser_pouvoir", "observer", "discuter"
   "reasoning": "string", // Ton raisonnement ou justification pour cette action
   "dialogue": "string" // Le dialogue immersif que tu utilises pour interagir avec les joueurs
