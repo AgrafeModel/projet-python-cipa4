@@ -19,3 +19,8 @@ gymnasium>=0.29.0
 supersuit>=3.9.0
 stable-baselines3>=2.3.0
 numpy>=1.26.0
+
+# Text-to-speech and machine learning
+elevenlabs>=1.0.0
+transformers>=4.40.0
+torch>=2.2.0
