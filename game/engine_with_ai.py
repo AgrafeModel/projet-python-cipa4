@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import json
 import random
-import os
 from dataclasses import dataclass
 from typing import List, Optional
 from collections import deque
-
+import game.constants
 from game.structure_ai import Player
 import google.generativeai as genai
 
@@ -23,10 +22,11 @@ class GeminiDialogueIntegration:
 
     def __init__(self, api_key: str):
         # API key configuration
-        genai.configure(api_key='AIzaSyD2W1Dq4Px-7SuFu6d6lDwXK9wt_8WS9t8')  
+        genai.configure(api_key=game.constants.API_GEMINI)  
         
         self.model = genai.GenerativeModel('gemini-2.5-flash-lite')
         
+        # Generation parameters controlling creativity and length
         self.generation_config = {
             'temperature': 0.9,  # Creativity
             'top_p': 0.95,
@@ -34,10 +34,15 @@ class GeminiDialogueIntegration:
             'max_output_tokens': 3000,
         }
 
+        # Builds a structured prompt for Gemini containing:
+        # - Current game state
+        # - Alive players
+        # - Known information
+        # - Recent chat history
+        # - Role-based behavior instructions
     def _build_prompt(self, players: List[Player], day: int, 
                      eliminated: List[str], wolves_found: List[str], 
                      history: List[tuple]) -> str:
-        """Construit le prompt pour générer toute la discussion du jour"""
         
         alive_names = [p.name for p in players if p.alive]
         
@@ -56,16 +61,17 @@ CONTEXTE :
         # Add history to the prompt
         if history and len(history) > 0:
             prompt += "\nHISTORIQUE RÉCENT :\n"
-            for speaker, text in history[-6:]:  # 6 derniers messages
+            for speaker, text in history[-6:]:  # Last 6 messages
                 prompt += f"{speaker}: {text}\n"
         
-        # Instructions for roles
+        # Wolves instructions
         prompt += "\nRÔLES SECRETS (à respecter) :\n"
         for p in players:
             if p.alive:
                 role_info = "LOUP (doit mentir et accuser des innocents)" if p.role == "loup" else "VILLAGEOIS (cherche les loups)"
                 prompt += f"- {p.name} : {role_info}\n"
         
+        # Global generation rules
         prompt += """
 INSTRUCTIONS :
 1. Génère 8-10 messages de discussion
@@ -108,6 +114,12 @@ GÉNÈRE LA DISCUSSION (format exact "Nom: texte") :
             return "La discussion IA ne peut pas être générée pour l'instant."
 
 
+# Core game engine managing:
+# - Game phases
+# - Player states
+# - Voting
+# - Night/day transitions
+# - AI or fallback discussions
 class GameEngine:
 
     def __init__(self, num_players: int, seed: Optional[int] = None, 
@@ -119,21 +131,23 @@ class GameEngine:
         self.day_count = 1
         self.phase = "JourDiscussion"
 
-        # Load players names
+        # Load AI player names from JSON
         with open("data/ai_names.json", "r", encoding="utf-8") as f:
             data = json.load(f)
         self.ai_names = data["prenoms"]
 
+        # Initialize players and game state
         self.players: List[Player] = self._create_players(num_players)
         self._last_night_victim: Optional[int] = None
         self.found_wolves_names: set[str] = set()
         self.public_chat_history: list[tuple[str, str]] = []
 
+        # Initialize Gemini if enabled
         self.use_ai_dialogue = use_ai_dialogue
         
         if use_ai_dialogue:
             if gemini_api_key is None:
-                gemini_api_key = 'AIzaSyD2W1Dq4Px-7SuFu6d6lDwXK9wt_8WS9t8'
+                gemini_api_key = game.constants.API_GEMINI
             
             if gemini_api_key:
                 try:
@@ -148,8 +162,11 @@ class GameEngine:
                 print("  → Utilisation du mode fallback")
                 self.use_ai_dialogue = False
 
+        # Keep a rolling buffer of recent messages
         self.recent_messages = deque(maxlen=40)
 
+    # Randomly assigns names and roles to players.
+    # About 1/4 of players are wolves.
     def _create_players(self, num_players: int) -> List[Player]:
         names = self.rng.sample(self.ai_names, num_players)
         num_wolves = max(1, num_players // 4)
@@ -157,6 +174,7 @@ class GameEngine:
         self.rng.shuffle(roles)
         return [Player(name=n, role=r, alive=True, note=0) for n, r in zip(names, roles)]
 
+    # Utility methods for querying alive players
     def alive_indexes(self) -> List[int]:
         return [i for i, p in enumerate(self.players) if p.alive]
 
@@ -232,7 +250,7 @@ class GameEngine:
                 print(f"⚠ Erreur génération discussion: {e}")
                 events = self._generate_simple([p.name for p in alive_players], n_messages=8)
         else:
-            # Mode fallback
+            # Fallback
             events = self._generate_simple([p.name for p in alive_players], n_messages=8)
 
         return events
