@@ -9,6 +9,7 @@ import pygame
 from gui.widgets import Button, Stepper, ChatBox, PlayerListPanel, Tooltip
 from game.engine import GameEngine
 from gui.settings_screen import SettingsScreen
+from ai.ollama_client import check_ollama_availability
 
 # Base class for all screens
 class Screen:
@@ -68,7 +69,12 @@ class SetupScreen(Screen):
         self.num_players.handle_event(event)
 
         if self.start_btn.handle_event(event):
-            self.app.set_screen(GameScreen(self.app, self.num_players.value))
+            # Check Ollama availability before starting the game
+            is_available, message = check_ollama_availability()
+            if not is_available:
+                self.app.set_screen(OllamaErrorScreen(self.app, message, self))
+            else:
+                self.app.set_screen(GameScreen(self.app, self.num_players.value))
         
         if self.settings_btn.handle_event(event):
             self.app.set_screen(SettingsScreen(self.app, previous_screen=self))
@@ -178,7 +184,8 @@ class GameScreen(Screen):
             if self._msg_timer >= self.msg_delay:
                 self._msg_timer = 0.0
                 ev = self.pending_events.pop(0)
-                self.chat.add_message(ev.name_ia, ev.text, ev.show_name_ia)
+                is_system = ev.name_ia == "Système"
+                self.chat.add_message(ev.name_ia, ev.text, ev.show_name_ia, is_system=is_system)
         
         # Generate next message from Ollama if queue is empty AND we haven't exceeded time limit
         elif self._message_generator and self.engine.phase == "JourDiscussion":
@@ -188,7 +195,8 @@ class GameScreen(Screen):
                     self._msg_timer = 0.0
                     try:
                         ev = next(self._message_generator)
-                        self.chat.add_message(ev.name_ia, ev.text, ev.show_name_ia)
+                        is_system = ev.name_ia == "Système"
+                        self.chat.add_message(ev.name_ia, ev.text, ev.show_name_ia, is_system=is_system)
                     except StopIteration:
                         self._message_generator = None
             else:
@@ -216,10 +224,18 @@ class GameScreen(Screen):
         # Build role info for context
         role_map = {p.name: p.role for p in self.engine.players}
         
+        # Track last speaker to avoid consecutive messages
+        last_speaker = None
+        
         # Generate messages continuously (until stopped by time limit)
         message_count = 0
         while True:  # Infinite loop - stopped by time limit in update()
-            speaker = self.engine.rng.choice(alive_names)
+            # Choose speaker, avoiding consecutive messages from same person
+            available_speakers = [name for name in alive_names if name != last_speaker or len(alive_names) == 1]
+            if not available_speakers:
+                available_speakers = alive_names  # Fallback
+            
+            speaker = self.engine.rng.choice(available_speakers)
             agent = self.engine.agents[speaker]
             
             # Create public state with role info
@@ -242,8 +258,11 @@ class GameScreen(Screen):
                 if rendered not in self.engine.recent_messages:
                     self.engine.recent_messages.append(rendered)
                     break
-            else:
+                # Regenerate if repeating
                 msg = agent.decide_message(state)
+            
+            # Update last speaker tracking
+            last_speaker = speaker
             
             # Record in engine
             self.engine.public_chat_history.append((speaker, msg))
@@ -357,7 +376,8 @@ class GameScreen(Screen):
                 if self.pending_events:
                     while self.pending_events:
                         ev = self.pending_events.pop(0)
-                        self.chat.add_message(ev.name_ia, ev.text, ev.show_name_ia)
+                        is_system = ev.name_ia == "Système"
+                        self.chat.add_message(ev.name_ia, ev.text, ev.show_name_ia, is_system=is_system)
                     return
 
                 events = self.engine.advance()
@@ -583,3 +603,85 @@ class DefeatScreen(EndScreen):
             wolves = wolves,
             found_wolves = found_wolves
         )
+
+
+# Ollama error screen
+class OllamaErrorScreen(Screen):
+    def __init__(self, app, error_message: str, previous_screen):
+        super().__init__(app)
+        self.error_message = error_message
+        self.previous_screen = previous_screen
+        
+        self.title_font = pygame.font.SysFont(None, 48)
+        self.font = pygame.font.SysFont(None, 32)
+        self.small_font = pygame.font.SysFont(None, 24)
+        
+        # Return button
+        self.return_btn = Button(
+            rect=(app.w // 2 - 100, app.h // 2 + 150, 200, 50),
+            text="Retour",
+            font=self.font
+        )
+        
+        # Retry button
+        self.retry_btn = Button(
+            rect=(app.w // 2 - 100, app.h // 2 + 80, 200, 50),
+            text="Réessayer",
+            font=self.font
+        )
+    
+    def handle_event(self, event):
+        if self.return_btn.handle_event(event):
+            self.app.set_screen(self.previous_screen)
+        
+        if self.retry_btn.handle_event(event):
+            # Re-check Ollama availability before retrying
+            is_available, message = check_ollama_availability()
+            if not is_available:
+                # Still not available, update error message and stay on error screen
+                self.error_message = message
+            else:
+                # Now available, start the game
+                if hasattr(self.previous_screen, 'num_players'):
+                    num_players = self.previous_screen.num_players.value
+                    self.app.set_screen(GameScreen(self.app, num_players))
+                else:
+                    self.app.set_screen(self.previous_screen)
+    
+    def draw(self, surface):
+        surface.fill((25, 15, 15))  # Dark red background
+        
+        # Title
+        title = self.title_font.render("Erreur Ollama", True, (255, 100, 100))
+        title_rect = title.get_rect(center=(self.app.w // 2, self.app.h // 2 - 100))
+        surface.blit(title, title_rect)
+        
+        # Error message
+        y_offset = 0
+        for line in self.error_message.split('\n'):
+            if line.strip():
+                error_text = self.font.render(line.strip(), True, (255, 200, 200))
+                error_rect = error_text.get_rect(center=(self.app.w // 2, self.app.h // 2 - 40 + y_offset))
+                surface.blit(error_text, error_rect)
+                y_offset += 35
+        
+        # Instructions
+        instructions = [
+            "Assurez-vous que:",
+            "• Ollama est lancé (ollama serve)",
+            "• Un modèle est installé (ollama pull mistral)",
+            "• La configuration est correcte",
+            "",
+            "Sans Ollama, le jeu ne peut pas démarrer."
+        ]
+        
+        y_offset = 30
+        for instruction in instructions:
+            inst_text = self.small_font.render(instruction, True, (200, 200, 200))
+            inst_rect = inst_text.get_rect(center=(self.app.w // 2, self.app.h // 2 + y_offset))
+            surface.blit(inst_text, inst_rect)
+            y_offset += 25
+        
+        # Buttons
+        self.retry_btn.draw(surface)
+        self.return_btn.draw(surface)

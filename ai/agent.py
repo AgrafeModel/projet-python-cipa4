@@ -80,9 +80,17 @@ class Agent:
         if not candidates:
             return "…"
 
-        # Try Ollama first
+        # Try Ollama first - re-check availability each time
         if self.use_ollama and self.ollama_client:
             try:
+                # Double-check Ollama is still available
+                from ai.ollama_client import check_ollama_availability
+                is_available, _ = check_ollama_availability()
+                if not is_available:
+                    print(f"⚠️  Ollama is no longer available for {self.name}")
+                    self.use_ollama = False  # Disable for this session
+                    return self._generate_from_templates(candidates)
+                
                 message = self._generate_with_ollama(state, candidates)
                 if message:
                     return message
@@ -161,8 +169,21 @@ Réponse:"""
                 message = message.split('\n')[0].strip()
                 
                 # Ensure reasonable length
-                if len(message) > 150:
-                    message = message[:150] + "..."
+                if len(message) > 120:
+                    # Try to cut at sentence end or punctuation
+                    truncate_pos = 120
+                    for punct in ['.', '!', '?', ',']:
+                        pos = message.rfind(punct, 80, 120)
+                        if pos > 60:  # Found good punctuation
+                            truncate_pos = pos + 1
+                            break
+                    
+                    original_length = len(message)
+                    message = message[:truncate_pos].strip()
+                    
+                    # Only add ... if we actually truncated significantly
+                    if truncate_pos < original_length - 5:
+                        message += "..."
                 
                 # Reject if empty or English
                 if not message or self._is_mostly_english(message):

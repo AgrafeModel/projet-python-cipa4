@@ -5,6 +5,41 @@
 # main par l'humain, mais l'IA ajoute des optimisations et des suggestions.
 
 import pygame
+import hashlib
+
+
+# Generate distinctive colors for player names
+def generate_player_color(player_name: str) -> tuple[int, int, int]:
+    """Generate a consistent, readable color for each player based on their name."""
+    # Use hash of player name to get consistent color
+    hash_value = int(hashlib.md5(player_name.encode()).hexdigest()[:6], 16)
+    
+    # Extract RGB components and adjust for readability
+    r = (hash_value >> 16) & 0xFF
+    g = (hash_value >> 8) & 0xFF
+    b = hash_value & 0xFF
+    
+    # Ensure colors are bright enough to read on dark background
+    # Minimum brightness threshold
+    min_brightness = 120
+    
+    # Boost colors if too dark
+    if r + g + b < min_brightness * 3:
+        r = min(255, r + 80)
+        g = min(255, g + 80)
+        b = min(255, b + 80)
+    
+    # Avoid colors too similar to system color (orange)
+    # If color is too orange-ish, shift it
+    if r > 200 and g > 100 and g < 180 and b < 100:
+        g = min(255, g + 60)  # Make more yellow or red
+    
+    return (r, g, b)
+
+
+# System message color (red for system messages)
+SYSTEM_COLOR = (255, 100, 100)
+
 
 # Button widget with hover effect and optional tooltip
 class Button:
@@ -104,11 +139,25 @@ class ChatBox:
         self.padding = 12
         self.line_gap = 6
         self.scroll_px = 0
-        self.messages = []  # {"name_ia": str, "text": str, "show_name_ia": bool}
+        self.messages = []  # {"name_ia": str, "text": str, "show_name_ia": bool, "color": tuple}
+        self.player_colors = {}  # Cache of player colors
 
     # Adds a message to the chat box
-    def add_message(self, name_ia: str, text: str, show_name_ia: bool = True):
-        self.messages.append({"name_ia": name_ia, "text": text, "show_name_ia": show_name_ia})
+    def add_message(self, name_ia: str, text: str, show_name_ia: bool = True, is_system: bool = False):
+        # Determine color for the message
+        if is_system:
+            color = SYSTEM_COLOR
+        else:
+            if name_ia not in self.player_colors:
+                self.player_colors[name_ia] = generate_player_color(name_ia)
+            color = self.player_colors[name_ia]
+        
+        self.messages.append({
+            "name_ia": name_ia, 
+            "text": text, 
+            "show_name_ia": show_name_ia,
+            "color": color
+        })
         self.scroll_to_bottom()
 
     # Scrolls the chat box to the bottom
@@ -170,14 +219,46 @@ class ChatBox:
         y = self.rect.y + self.padding - self.scroll_px
         max_w = self.rect.width - 2 * self.padding
 
-        # Draw each message with wrapping
+        # Draw each message with wrapping and colors
         for m in self.messages:
+            message_color = m.get("color", (235, 235, 235))
+            is_system_msg = message_color == SYSTEM_COLOR
             prefix = f"{m['name_ia']}: " if m["show_name_ia"] else "???: "
-            lines = self._wrap_text(prefix + m["text"], max_w)
-            for line in lines:
-                label = self.font.render(line, True, (235, 235, 235))
-                surface.blit(label, (x, y))
+            full_text = prefix + m["text"]
+            
+            # Wrap the full text
+            lines = self._wrap_text(full_text, max_w)
+            
+            for i, line in enumerate(lines):
+                if is_system_msg:
+                    # System messages: everything in red
+                    label = self.font.render(line, True, message_color)
+                    surface.blit(label, (x, y))
+                elif i == 0 and m["show_name_ia"]:
+                    # First line of player message: render name in color, rest in white
+                    if ": " in line:
+                        name_part, text_part = line.split(": ", 1)
+                        name_part += ": "
+                        
+                        # Render name part in player color
+                        name_surface = self.font.render(name_part, True, message_color)
+                        surface.blit(name_surface, (x, y))
+                        
+                        # Render text part in white
+                        name_width = self.font.size(name_part)[0]
+                        text_surface = self.font.render(text_part, True, (235, 235, 235))
+                        surface.blit(text_surface, (x + name_width, y))
+                    else:
+                        # Fallback: render entire line in player color
+                        label = self.font.render(line, True, message_color)
+                        surface.blit(label, (x, y))
+                else:
+                    # Other lines: render in white (continuation of message)
+                    label = self.font.render(line, True, (235, 235, 235))
+                    surface.blit(label, (x, y))
+                
                 y += self.font.get_linesize()
+            
             y += self.line_gap
 
         # Restore previous clip

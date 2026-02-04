@@ -38,8 +38,8 @@ class GameEngine:
         # Random generator with optional seed for reproducibility
         self.rng = random.Random(seed)
 
-        self.day_count = 0  # Will be incremented to 1 by resolve_night_and_start_next_day()
-        self.phase = "Nuit"  # Start with night phase to avoid baseless accusations
+        self.day_count = 1  # Start with day 1
+        self.phase = "JourDiscussion"  # Start with day phase for discussion
 
         with open("data/ai_names.json", "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -156,8 +156,15 @@ class GameEngine:
 
         # Generate messages
         events: list[ChatEvent] = []
+        last_speaker = None
+        
         for _ in range(n_messages):
-            speaker = self.rng.choice(alive_names)
+            # Choose speaker, avoiding consecutive messages from same person
+            available_speakers = [name for name in alive_names if name != last_speaker or len(alive_names) == 1]
+            if not available_speakers:
+                available_speakers = alive_names  # Fallback
+                
+            speaker = self.rng.choice(available_speakers)
             agent = self.agents[speaker]
 
             # create public state for the agent
@@ -184,6 +191,9 @@ class GameEngine:
             # engine records the message
             self.public_chat_history.append((speaker, msg))
             events.append(ChatEvent(name_ia=speaker, text=msg, show_name_ia=True))
+            
+            # Update last speaker
+            last_speaker = speaker
 
         return events
 
