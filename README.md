@@ -38,3 +38,13 @@ source .venv/bin/activate #pour lancer l'environnement
 dans un premier terminal `ollama serve` pour lancer ollama. Puis dans un second `ollama pull mistral` pour télécharger le modèle de mistral
 
 a tester : ministral
+
+## Environnement
+
+Avant de lancer le projet, il est nécessaire d'installer les dépendances du projet. Pour cela, il suffit de suivre les instructions ci-dessus pour créer un environnement virtuel et installer les dépendances à partir du fichier `requirements.txt`.
+
+Il est aussi nécéssaire de crée un fichier `.env` à la racine du projet avec les variables d'environnement suivantes, présente dans le fichier `.env.example` :
+
+```env
+OPENROUTER_API_KEY=XXXXXX-XXXXXX-XXXXXX
+```

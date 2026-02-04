@@ -10,19 +10,18 @@ import os
 
 from gui.screens import SetupScreen, GameScreen, VictoryScreen, DefeatScreen
 
-
 class App:
     """Application with multiple music tracks for different screens"""
-    
+
     def __init__(self, w=1000, h=700):
         pygame.init()
         pygame.mixer.init()
-        
+
         self.w, self.h = w, h
         self.screen = pygame.display.set_mode((w, h))
         pygame.display.set_caption("Loup-Garou IA")
         self.clock = pygame.time.Clock()
-        
+
         # Music tracks for different screens
         self.music_tracks = {
             "menu": "music/menu.mp3",
@@ -30,60 +29,60 @@ class App:
             "victory": "music/Victory.mp3",
             "defeat": "music/Game_over.mp3"
         }
-        
+
         self.current_track = None
         self.current_screen = SetupScreen(self)
-        
+
         # Play menu music
         self.play_music("menu")
-    
+
     def play_music(self, track_name):
         """
         Changes the currently playing music
-        
+
         Args:
             track_name: Name of the track ("menu", "game", "victory", "defeat")
         """
         # Don't reload if already playing
         if track_name == self.current_track:
             return
-        
+
         # Check if track exists in dictionary
         if track_name not in self.music_tracks:
             print(f"⚠ Unknown track: {track_name}")
             return
-        
+
         music_path = self.music_tracks[track_name]
-        
+
         # Check if file exists
         if not os.path.exists(music_path):
             print(f"⚠ Music file not found: {music_path}")
             print(f"  Place a file named '{os.path.basename(music_path)}' in assets/music/")
             return
-        
+
         try:
             # Keep current volume when switching tracks
             current_volume = pygame.mixer.music.get_volume()
-            
+
             pygame.mixer.music.load(music_path)
             pygame.mixer.music.set_volume(current_volume)
             if music_path == "music/LG.mp3":
                 pygame.mixer.music.play(-1)  # Loop infinitely
             else:
                 pygame.mixer.music.play(1)
-            
+
             self.current_track = track_name
             print(f"♪ Now playing: {track_name} ({os.path.basename(music_path)})")
-            
+
         except pygame.error as e:
             print(f"⚠ Error loading music: {e}")
-    
+
     def set_screen(self, screen):
         """
         Changes the current screen and adapts the music accordingly
         """
         self.current_screen = screen
-        
+
         # Change music based on screen type
         if isinstance(screen, SetupScreen):
             self.play_music("menu")
@@ -93,7 +92,7 @@ class App:
             self.play_music("victory")
         elif isinstance(screen, DefeatScreen):
             self.play_music("defeat")
-    
+
     def run(self):
         """Main application loop"""
         while True:

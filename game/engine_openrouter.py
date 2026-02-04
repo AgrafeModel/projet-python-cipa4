@@ -63,6 +63,13 @@ class GameEngine:
             agent = Agent(p.name, p.role)  # Using the OpenRouter Agent
             self.agents[p.name] = agent
 
+        # Initialize the game context
+        self._initialize_game_context()
+
+        # Set player roles in context manager for filtering
+        for player in self.players:
+            self.context_manager.set_player_role(player.name, player.role)
+
         # Public chat history
         self.public_chat_history: list[tuple[str, str]] = []
 
@@ -125,8 +132,47 @@ class GameEngine:
         p.alive = False
         p.note = 0  # reset note on death
 
+    # Initialize the game context with initial state
+    def _initialize_game_context(self):
+        # Add initial game state to context
+        alive_players = [p.name for p in self.players if p.alive]
+        initial_context = {
+            "type": "game_start",
+            "content": f"Période: JourDiscussion. Jour {self.day_count}. Joueurs vivants: {', '.join(alive_players)}. La partie commence!"
+        }
+        self.context_manager.add_global_context(initial_context)
+
+        # Add role information to each player's private context
+        for player in self.players:
+            if player.role == "loup":
+                wolves = [p.name for p in self.players if p.role == "loup"]
+                role_info = {
+                    "type": "role_info",
+                    "content": f"Tu es un Loup-Garou. Tes alliés loups sont: {', '.join([w for w in wolves if w != player.name])}."
+                }
+            else:
+                role_info = {
+                    "type": "role_info",
+                    "content": f"Tu es un Villageois. Ton objectif est d'identifier et éliminer les Loups-Garous."
+                }
+            self.context_manager.add_player_context(player.name, role_info)
+
+    # Update context with current game state
+    def _update_game_state_context(self):
+        alive_players = [p.name for p in self.players if p.alive]
+        dead_players = [p.name for p in self.players if not p.alive]
+
+        state_context = {
+            "type": "game_state",
+            "content": f"Période: {self.phase}. Jour {self.day_count}. Joueurs vivants: {', '.join(alive_players)}. Joueurs morts: {', '.join(dead_players) if dead_players else 'Aucun'}."
+        }
+        self.context_manager.add_global_context(state_context)
+
     # Generates day discussion messages using OpenRouter
     def _generate_day_discussion(self, n_messages: int = 10) -> list[ChatEvent]:
+        # Update game state context before discussion
+        self._update_game_state_context()
+
         alive_names = [p.name for p in self.players if p.alive]
 
         # Generate messages using OpenRouter
@@ -152,16 +198,32 @@ class GameEngine:
                 self.public_chat_history.append((speaker_name, msg))
                 events.append(ChatEvent(name_ia=speaker_name, text=msg, show_name_ia=True))
 
+                # Add dialogue to global context in a readable format
+                dialogue_context = {
+                    "type": "dialogue",
+                    "content": f"{speaker_name} dit: \"{msg}\""
+                }
+                self.context_manager.add_global_context(dialogue_context)
+
             except Exception as e:
                 # Fallback message if OpenRouter fails
                 fallback_msg = "..."
                 events.append(ChatEvent(name_ia=speaker_name, text=fallback_msg, show_name_ia=True))
+                print(f"[ERROR] Agent {speaker_name} failed to generate message: {e}")
 
         return events
 
     # Starts the day phase with discussion
     def start_day(self) -> List[ChatEvent]:
         self.phase = "JourDiscussion"
+
+        # Add day start to context
+        day_start_context = {
+            "type": "phase_change",
+            "content": f"Période: JourDiscussion. Début du Jour {self.day_count}."
+        }
+        self.context_manager.add_global_context(day_start_context)
+
         events = [ChatEvent("Système", f"Début du Jour {self.day_count}.", True)]
         events += self._generate_day_discussion(n_messages=8)
         return events
@@ -169,6 +231,14 @@ class GameEngine:
     # Starts the voting phase
     def start_vote(self) -> List[ChatEvent]:
         self.phase = "JourVote"
+
+        # Add vote phase to context
+        vote_context = {
+            "type": "phase_change",
+            "content": "Période: JourVote. La phase de vote commence. Les joueurs doivent élire quelqu'un à éliminer."
+        }
+        self.context_manager.add_global_context(vote_context)
+
         return [
             ChatEvent(
                 "Système",
@@ -203,8 +273,23 @@ class GameEngine:
             )
         )
 
+        # Add elimination to context
+        elimination_context = {
+            "type": "elimination",
+            "content": f"Le village a voté pour éliminer {target.name} (rôle: {target.role}). {target.name} est mort."
+        }
+        self.context_manager.add_global_context(elimination_context)
+
         # Passe à la nuit directement
         self.phase = "Nuit"
+
+        # Add night phase to context
+        night_context = {
+            "type": "phase_change",
+            "content": "Période: Nuit. La nuit tombe, les loups-garous vont agir."
+        }
+        self.context_manager.add_global_context(night_context)
+
         events.append(ChatEvent("???", "La nuit tombe…", False))
         events.append(ChatEvent("???", "…des pas dans l'ombre…", False))
         return events
@@ -259,12 +344,26 @@ class GameEngine:
 
         events: List[ChatEvent] = []
         if self._last_night_victim is not None:
-            name = self.players[self._last_night_victim].name
+            victim_name = self.players[self._last_night_victim].name
             events.append(
-                ChatEvent("Système", f"Au matin, on retrouve {name} mort.", True)
+                ChatEvent("Système", f"Au matin, on retrouve {victim_name} mort.", True)
             )
+
+            # Add night death to context
+            death_context = {
+                "type": "night_death",
+                "content": f"Au matin du jour {self.day_count}, {victim_name} a été trouvé mort, tué par les loups-garous pendant la nuit."
+            }
+            self.context_manager.add_global_context(death_context)
         else:
             events.append(ChatEvent("Système", "Au matin, personne n'est mort…", True))
+
+            # Add no death to context
+            no_death_context = {
+                "type": "night_result",
+                "content": f"Au matin du jour {self.day_count}, personne n'est mort pendant la nuit."
+            }
+            self.context_manager.add_global_context(no_death_context)
 
         # Start next day discussion
         events += self.start_day()
@@ -278,6 +377,14 @@ class GameEngine:
                 return self.start_vote()
             else:
                 self.phase = "Nuit"
+
+                # Add night phase to context
+                night_context = {
+                    "type": "phase_change",
+                    "content": "Période: Nuit. La nuit tombe, les loups-garous vont agir."
+                }
+                self.context_manager.add_global_context(night_context)
+
                 return [
                     ChatEvent("???", "La nuit tombe…", False),
                     ChatEvent("???", "…des pas dans l'ombre…", False),
