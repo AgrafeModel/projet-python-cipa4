@@ -11,11 +11,12 @@ import game.constants
 from game.structure_ai import Player
 import google.generativeai as genai
 
+# Represents a single chat message event displayed to the user
 @dataclass
 class ChatEvent:
-    name_ia: str
-    text: str
-    show_name_ia: bool
+    name_ia: str            # Name of the player speaking
+    text: str               # Message content
+    show_name_ia: bool      # Whether the name should be visible (night mode)
 
 
 class GeminiDialogueIntegration:
