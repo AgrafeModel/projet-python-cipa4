@@ -7,7 +7,7 @@
 import pygame
 
 from gui.widgets import Button, Stepper, ChatBox, PlayerListPanel, Tooltip
-from game.engine import GameEngine
+from game.engine_with_ai import GameEngine
 from gui.settings_screen import SettingsScreen
 import audio_config
 from game import tts_helper
