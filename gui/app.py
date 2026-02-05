@@ -25,7 +25,7 @@ class App:
         
         # Music tracks for different screens
         self.music_tracks = {
-            "menu": "music/menu.mp3",
+            "menu": "music/menu2.mp3",
             "game": "music/LG.mp3",
             "victory": "music/Victory.mp3",
             "defeat": "music/Game_over.mp3"

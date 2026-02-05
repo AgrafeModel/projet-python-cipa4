@@ -17,6 +17,51 @@ class OllamaResponse:
     raw: dict[str, Any]
 
 
+def check_ollama_availability(config: Optional[OllamaConfig] = None) -> tuple[bool, str]:
+    """
+    Check if Ollama is running and has available models.
+    
+    Returns:
+        tuple: (is_available: bool, message: str)
+    """
+    config = config or load_ollama_config()
+    
+    try:
+        # Test connection to Ollama
+        url = config.base_url.rstrip("/") + "/api/tags"
+        req = url_request.Request(url, headers={"Accept": "application/json"})
+        
+        with url_request.urlopen(req, timeout=5) as resp:
+            body = resp.read().decode("utf-8")
+            data = json.loads(body)
+            
+        models = data.get("models", [])
+        if not models:
+            return False, "Ollama est lancé mais aucun modèle n'est disponible"
+            
+        # Check if configured model is available
+        model_names = [m.get("name", "") for m in models if m.get("name")]
+        if config.model not in model_names:
+            # Also check if model name without tag matches (e.g., "mistral" matches "mistral:latest")
+            base_model_name = config.model.split(':')[0]
+            matching_models = [name for name in model_names if name.startswith(base_model_name)]
+            
+            if not matching_models:
+                available_models = ", ".join(model_names[:3])
+                return False, f"Modèle '{config.model}' non trouvé. Modèles disponibles: {available_models}"
+            
+        return True, "Ollama est disponible"
+        
+    except url_error.HTTPError as exc:
+        return False, f"Erreur HTTP Ollama: {exc.code}"
+    except url_error.URLError:
+        return False, f"Impossible de se connecter à Ollama sur {config.base_url}"
+    except json.JSONDecodeError:
+        return False, "Réponse invalide d'Ollama"
+    except Exception as e:
+        return False, f"Erreur inconnue: {str(e)}"
+
+
 class OllamaClient:
     def __init__(self, config: Optional[OllamaConfig] = None):
         self.config = config or load_ollama_config()
