@@ -20,6 +20,8 @@ from ai.agent_ollama import Agent, AgentConfig, load_templates
 from ai.rules import PublicState
 from game.structure_ai import Player
 
+# TTS
+from game.tts_helper import speak_text
 
 # Data class for chat events
 @dataclass
@@ -194,6 +196,9 @@ class GameEngine:
             
             # Update last speaker
             last_speaker = speaker
+
+            # ← Lecture audio du message
+            speak_text(msg)
 
         return events
 
