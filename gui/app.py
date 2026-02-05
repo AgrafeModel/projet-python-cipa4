@@ -9,7 +9,7 @@ import sys
 import os
 
 from gui.screens import SetupScreen, GameScreen, VictoryScreen, DefeatScreen
-
+import audio_config
 
 class App:
     """Application with multiple music tracks for different screens"""
@@ -34,12 +34,14 @@ class App:
         self.current_track = None
         self.current_screen = SetupScreen(self)
         
+        self.music_volume = audio_config.music_volume
+        self.sound_volume = audio_config.voice_volume
+
         # Play menu music
         self.play_music("menu")
 
-        self.music_volume = 0.5
-        self.sound_volume = 0.8
-    
+        pygame.mixer.music.set_volume(self.music_volume)  # Volume initial correct
+        
     def play_music(self, track_name):
         """
         Changes the currently playing music
