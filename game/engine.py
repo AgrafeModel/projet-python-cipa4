@@ -23,6 +23,8 @@ from game.structure_ai import Player
 # TTS
 from game.tts_helper import speak_text
 
+import audio_config
+
 # Data class for chat events
 @dataclass
 class ChatEvent:
@@ -44,9 +46,7 @@ class GameEngine:
         self.phase = "JourDiscussion"
 
         with open("data/ai_names.json", "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        self.ai_names = data["prenoms"]
+            self.characters_data = json.load(f)["characters"]
 
         self.players: List[Player] = self._create_players(num_players)
 
@@ -103,15 +103,23 @@ class GameEngine:
 
     # Creates players with assigned roles
     def _create_players(self, num_players: int) -> List[Player]:
-        names = self.rng.sample(self.ai_names, num_players)
+        # Choisir num_players personnages au hasard
+        selected_chars = self.rng.sample(self.characters_data, num_players)
+        
         num_wolves = max(1, num_players // 4)
-
         roles = ["loup"] * num_wolves + ["villageois"] * (num_players - num_wolves)
         self.rng.shuffle(roles)
 
-        # Create Player instances
+        # Créer Player avec name, role et voice_id
         return [
-            Player(name=n, role=r, alive=True, note=0) for n, r in zip(names, roles)
+            Player(
+                name=char["name"],
+                role=r,
+                alive=True,
+                note=0,
+                voice_id=char["voice_id"]  # <-- ajout ici
+            )
+            for char, r in zip(selected_chars, roles)
         ]
 
     # Helpers to get alive player indexes
@@ -188,7 +196,8 @@ class GameEngine:
             events.append(ChatEvent(name_ia=speaker, text=msg, show_name_ia=True))
 
             # ← Lecture audio du message
-            speak_text(msg)
+            speaker_player = next(p for p in self.players if p.name == speaker)
+            speak_text(msg, voice_id=speaker_player.voice_id)
 
         return events
 
@@ -275,6 +284,7 @@ class GameEngine:
 
     # Advances the game phase
     def advance(self) -> List[ChatEvent]:
+
         if self.phase == "JourDiscussion":
             # If day 2 or later, go to vote
             if self.day_count >= 2:

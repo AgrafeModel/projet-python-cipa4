@@ -9,6 +9,8 @@ import pygame
 from gui.widgets import Button, Stepper, ChatBox, PlayerListPanel, Tooltip
 from game.engine import GameEngine
 from gui.settings_screen import SettingsScreen
+import audio_config
+from game import tts_helper
 
 # Base class for all screens
 class Screen:
@@ -264,23 +266,33 @@ class GameScreen(Screen):
             self.app.set_screen(SettingsScreen(self.app, previous_screen=self))
             return
 
-        # Prioritize buttons
         if self.engine.phase != "JourVote":
             if self.continue_btn.handle_event(event):
-                if self.pending_events:
-                    while self.pending_events:
-                        ev = self.pending_events.pop(0)
-                        self.chat.add_message(ev.name_ia, ev.text, ev.show_name_ia)
-                    return
+                # 1️⃣ Stoppe la voix en cours
+                if audio_config.voice_channel:
+                    audio_config.voice_channel.stop()
 
+                # 2️⃣ Vide la queue TTS pour ne pas jouer les anciens messages
+                with tts_helper.generation_lock:
+                    tts_helper.audio_ready_list.clear()
+
+                # 3️⃣ Affiche les messages en attente dans le chat
+                while self.pending_events:
+                    ev = self.pending_events.pop(0)
+                    self.chat.add_message(ev.name_ia, ev.text, ev.show_name_ia)
+
+                # 4️⃣ Avance le jeu et récupère les nouveaux événements
                 events = self.engine.advance()
                 self._enqueue_events(events)
 
                 self._refresh_ui_players_from_engine()
                 self._update_controls()
+
                 if self._check_game_over():
                     return
-                return 
+                return
+
+ 
         # Vote confirmation
         else:
             if self.confirm_btn.handle_event(event):
