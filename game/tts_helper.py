@@ -17,7 +17,7 @@ audio_config.voice_channel.set_volume(audio_config.voice_volume)
 
 # ElevenLabs Client
 # NOTE: It is recommended to use an environment variable for the API key
-elevenlabs = ElevenLabs(api_key="YOUR_API_KEY_HERE")
+elevenlabs = ElevenLabs(api_key="sk_824915de33371e1b74d7f1fced13c61c3cb962ef61a45bc2")
 
 # -------------------------------------------------------------------
 # Queue and lock for TTS generation and playback
