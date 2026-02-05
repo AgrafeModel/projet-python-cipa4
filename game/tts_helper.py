@@ -9,27 +9,28 @@ import os
 import audio_config
 
 # -------------------------------------------------------------------
-# Initialisation du mixer et du canal TTS
+# Mixer and TTS channel initialization
 # -------------------------------------------------------------------
 pygame.mixer.init()
 audio_config.voice_channel = pygame.mixer.Channel(1)
 audio_config.voice_channel.set_volume(audio_config.voice_volume)
 
-# Client ElevenLabs
-elevenlabs = ElevenLabs(api_key="sk_bdd154038f47224bf83993e05313dd3a3f7a44fb107f428b")
+# ElevenLabs Client
+# NOTE: It is recommended to use an environment variable for the API key
+elevenlabs = ElevenLabs(api_key="YOUR_API_KEY_HERE")
 
 # -------------------------------------------------------------------
-# Queue et lock pour la génération et lecture TTS
+# Queue and lock for TTS generation and playback
 # -------------------------------------------------------------------
-audio_generation_queue = Queue()      # textes à générer
-audio_ready_list = []                 # fichiers audio prêts
-generation_lock = threading.Lock()    # verrou pour accès thread-safe
+audio_generation_queue = Queue()      # Texts waiting to be generated
+audio_ready_list = []                 # Ready audio file paths
+generation_lock = threading.Lock()    # Thread-safe lock for list access
 
-APP = None  # variable globale pour référence à l'app
+APP = None  # Global variable for app reference
 
 
 # -------------------------------------------------------------------
-# Initialisation de l'app (optionnelle)
+# App initialization (optional)
 # -------------------------------------------------------------------
 def init(app):
     global APP
@@ -37,17 +38,17 @@ def init(app):
 
 
 # -------------------------------------------------------------------
-# Thread de génération TTS
+# TTS Generation Thread
 # -------------------------------------------------------------------
 def _tts_worker():
-    """Thread qui génère les fichiers audio en arrière-plan"""
+    """Background thread that generates audio files"""
     while True:
         text, voice_id = audio_generation_queue.get()
         if text is None:
-            break  # signal d'arrêt
+            break  # Stop signal
 
         try:
-            # Génération TTS via ElevenLabs
+            # Generate TTS via ElevenLabs
             audio_bytes = b"".join(
                 elevenlabs.text_to_speech.convert(
                     text=text,
@@ -57,27 +58,27 @@ def _tts_worker():
                 )
             )
 
-            # Sauvegarde dans un fichier temporaire
+            # Save to a temporary file
             with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmpfile:
                 tmpfile.write(audio_bytes)
                 tmpfile.flush()
                 mp3_path = tmpfile.name
 
-            # Ajout à la liste des audios prêts (thread-safe)
+            # Add to the ready list (thread-safe)
             with generation_lock:
                 audio_ready_list.append(mp3_path)
 
         except Exception as e:
-            print("Erreur génération TTS :", e)
+            print("TTS generation error:", e)
 
         audio_generation_queue.task_done()
 
 
 # -------------------------------------------------------------------
-# Thread de lecture audio
+# Audio Playback Thread
 # -------------------------------------------------------------------
 def _audio_player_worker():
-    """Joue les audios dès qu'ils sont prêts, séquentiellement"""
+    """Plays audio files sequentially as soon as they are ready"""
     while True:
         mp3_path = None
         with generation_lock:
@@ -90,33 +91,34 @@ def _audio_player_worker():
                 audio_config.voice_channel.play(sound)
                 audio_config.voice_channel.set_volume(audio_config.voice_volume)
 
+                # Wait for playback to finish
                 while audio_config.voice_channel.get_busy():
                     time.sleep(0.01)
 
             except Exception as e:
-                print("Erreur lecture audio :", e)
+                print("Audio playback error:", e)
 
         else:
             time.sleep(0.05)
 
 
 # -------------------------------------------------------------------
-# Lancer les threads
+# Start threads
 # -------------------------------------------------------------------
 threading.Thread(target=_tts_worker, daemon=True).start()
 threading.Thread(target=_audio_player_worker, daemon=True).start()
 
 
 # -------------------------------------------------------------------
-# Fonctions publiques
+# Public functions
 # -------------------------------------------------------------------
 def speak_text(text: str, voice_id: str = "JBFqnCBsd6RMkjVDRZzb"):
-    """Ajoute un texte à la queue pour génération TTS"""
+    """Adds text to the queue for TTS generation"""
     audio_generation_queue.put((text, voice_id))
 
 
 def stop_all_voices():
-    """Stoppe tout audio en cours et vide la queue"""
+    """Stops any currently playing audio and clears the queue"""
     if audio_config.voice_channel:
         audio_config.voice_channel.stop()
 
