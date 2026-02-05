@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 # Imports needed for AI agents
-from ai.agent import Agent, AgentConfig, load_templates
+from ai.agent_ollama import Agent, AgentConfig, load_templates
 from ai.rules import PublicState
 from game.structure_ai import Player
 

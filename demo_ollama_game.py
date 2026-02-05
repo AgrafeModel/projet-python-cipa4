@@ -10,7 +10,7 @@ Lance:
 
 import asyncio
 import json
-from ai.agent import Agent, AgentConfig
+from ai.agent_ollama import Agent, AgentConfig
 from ai.rules import PublicState
 
 
