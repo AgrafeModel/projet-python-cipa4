@@ -11,6 +11,10 @@ import game.constants
 from game.structure_ai import Player
 import google.generativeai as genai
 
+# TTS
+from game.tts_helper import speak_text
+import audio_config
+
 # Represents a single chat message event displayed to the user
 @dataclass
 class ChatEvent:
@@ -134,8 +138,7 @@ class GameEngine:
 
         # Load AI player names from JSON
         with open("data/ai_names.json", "r", encoding="utf-8") as f:
-            data = json.load(f)
-        self.ai_names = data["prenoms"]
+            self.characters_data = json.load(f)["characters"]
 
         # Initialize players and game state
         self.players: List[Player] = self._create_players(num_players)
@@ -169,11 +172,24 @@ class GameEngine:
     # Randomly assigns names and roles to players.
     # About 1/4 of players are wolves.
     def _create_players(self, num_players: int) -> List[Player]:
-        names = self.rng.sample(self.ai_names, num_players)
+        # Choisir num_players personnages au hasard
+        selected_chars = self.rng.sample(self.characters_data, num_players)
+        
         num_wolves = max(1, num_players // 4)
         roles = ["loup"] * num_wolves + ["villageois"] * (num_players - num_wolves)
         self.rng.shuffle(roles)
-        return [Player(name=n, role=r, alive=True, note=0) for n, r in zip(names, roles)]
+
+        # Créer Player avec name, role et voice_id
+        return [
+            Player(
+                name=char["name"],
+                role=r,
+                alive=True,
+                note=0,
+                voice_id=char["voice_id"]  # <-- ajout ici
+            )
+            for char, r in zip(selected_chars, roles)
+        ]
 
     # Utility methods for querying alive players
     def alive_indexes(self) -> List[int]:
@@ -206,7 +222,6 @@ class GameEngine:
         p.note = 0
 
     def _generate_day_discussion(self) -> list[ChatEvent]:
-        
         alive_players = [p for p in self.players if p.alive]
         eliminated = [p.name for p in self.players if not p.alive]
         wolves_found = list(self.found_wolves_names)
@@ -236,22 +251,26 @@ class GameEngine:
                     name = parts[0].strip()
                     text = parts[1].strip()
                     
-                    if name not in [p.name for p in alive_players]:
+                    # Vérifier si le locuteur est bien vivant
+                    speaker_player = next((p for p in alive_players if p.name == name), None)
+                    if not speaker_player:
                         continue
                     
+                    # Ajouter à l'historique et aux événements
                     events.append(ChatEvent(name_ia=name, text=text, show_name_ia=True))
                     self.public_chat_history.append((name, text))
+
+                    # --- AJOUT DU TTS ICI ---
+                    # On utilise le voice_id stocké dans l'objet Player
+                    speak_text(text, voice_id=speaker_player.voice_id)
                 
-                # Fallback
                 if not events:
-                    print("⚠ Aucun message valide généré, utilisation du fallback")
                     events = self._generate_simple([p.name for p in alive_players], n_messages=8)
                     
             except Exception as e:
                 print(f"⚠ Erreur génération discussion: {e}")
                 events = self._generate_simple([p.name for p in alive_players], n_messages=8)
         else:
-            # Fallback
             events = self._generate_simple([p.name for p in alive_players], n_messages=8)
 
         return events
