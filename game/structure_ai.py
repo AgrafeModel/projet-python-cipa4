@@ -12,3 +12,4 @@ class Player:
     role: str  # "villageois" | "loup"
     alive: bool = True
     note: int = 0  # AI's internal note about this player (0-3)
+    voice_id: str = "JBFqnCBsd6RMkjVDRZzb"

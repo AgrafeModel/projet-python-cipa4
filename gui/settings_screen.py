@@ -102,10 +102,7 @@ class SettingsScreen:
         self.small_font = pygame.font.SysFont(None, 24)
         
         # Get actual volume
-        try:
-            current_volume = pygame.mixer.music.get_volume()
-        except:
-            current_volume = 0.5
+        current_volume = audio_config.music_volume
 
         slider_width = min(500, app.w - 200)
         slider_x = (app.w - slider_width) // 2
@@ -113,7 +110,7 @@ class SettingsScreen:
 
         self.sound_slider = Slider(
             rect=(slider_x, slider_y, slider_width, 10),
-            initial_value=0.8,
+            initial_value=audio_config.voice_volume,
             label="Volume de la voix",
             font=self.font
         )
@@ -140,21 +137,27 @@ class SettingsScreen:
         if event.type == pygame.KEYDOWN and event.key == pygame.K_TAB:
             self._go_back()
             return
-        
+
+        # Sliders
         self.volume_slider.handle_event(event)
         self.sound_slider.handle_event(event)
-        
-        try:
-            pygame.mixer.music.set_volume(self.volume_slider.value)
-            audio_config.music_volume = self.volume_slider.value
-        except:
-            pass
-        
-        audio_config.voice_volume = self.sound_slider.value
 
+        # Music volume (live)
+        try:
+            audio_config.music_volume = self.volume_slider.value
+            pygame.mixer.music.set_volume(audio_config.music_volume)
+        except pygame.error:
+            pass
+
+        # Voice volume (live, même son en cours)
+        audio_config.voice_volume = self.sound_slider.value
+        if audio_config.voice_channel:
+            audio_config.voice_channel.set_volume(audio_config.voice_volume)
+
+        # Back button
         if self.back_button.handle_event(event):
             self._go_back()
-    
+
     def _go_back(self):
         if self.previous_screen:
             self.app.set_screen(self.previous_screen)
