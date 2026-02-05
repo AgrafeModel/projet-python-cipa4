@@ -48,3 +48,10 @@ Il est aussi nécéssaire de crée un fichier `.env` à la racine du projet avec
 ```env
 OPENROUTER_API_KEY=XXXXXX-XXXXXX-XXXXXX
 ```
+
+## Clé API
+
+Pour obtenir une clé API, il est nécessaire de créer un compte sur le site d'OpenRouter : https://openrouter.ai/. Une fois le compte créé, il suffit de se rendre dans la section "API Keys" et de générer une nouvelle clé API.
+Afin d'utiliser les modèles gratuits, il est nécessaire d'autoriser les modèles gratuits dans les paramètres de votre compte.
+Rendez vous dans la section "Settings" puis "Privacy & Guardrails" et activez "Enable free endpoints that may publish prompts".
+Cette clé doit ensuite être copiée dans le fichier `.env` à la racine du projet, comme indiqué ci-dessus.

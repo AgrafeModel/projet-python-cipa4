@@ -1,9 +1,6 @@
-from dotenv import load_dotenv
-import os
 from openai import OpenAI
 from openrouter import dataclass
 import json
-
 
 @dataclass
 class OpenRouterClientConfig:
