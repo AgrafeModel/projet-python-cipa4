@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 # Imports needed for AI agents
-from ai.agent import Agent, AgentConfig, load_templates
+from ai.agent_ollama import Agent, AgentConfig, load_templates
 from ai.rules import PublicState
 from game.structure_ai import Player
 
@@ -42,8 +42,8 @@ class GameEngine:
         # Random generator with optional seed for reproducibility
         self.rng = random.Random(seed)
 
-        self.day_count = 1
-        self.phase = "JourDiscussion"
+        self.day_count = 1  # Start with day 1
+        self.phase = "JourDiscussion"  # Start with day phase for discussion
 
         with open("data/ai_names.json", "r", encoding="utf-8") as f:
             self.characters_data = json.load(f)["characters"]
@@ -166,8 +166,15 @@ class GameEngine:
 
         # Generate messages
         events: list[ChatEvent] = []
+        last_speaker = None
+        
         for _ in range(n_messages):
-            speaker = self.rng.choice(alive_names)
+            # Choose speaker, avoiding consecutive messages from same person
+            available_speakers = [name for name in alive_names if name != last_speaker or len(alive_names) == 1]
+            if not available_speakers:
+                available_speakers = alive_names  # Fallback
+                
+            speaker = self.rng.choice(available_speakers)
             agent = self.agents[speaker]
 
             # create public state for the agent
@@ -194,6 +201,9 @@ class GameEngine:
             # engine records the message
             self.public_chat_history.append((speaker, msg))
             events.append(ChatEvent(name_ia=speaker, text=msg, show_name_ia=True))
+            
+            # Update last speaker
+            last_speaker = speaker
 
             # ← Lecture audio du message
             speaker_player = next(p for p in self.players if p.name == speaker)
@@ -204,10 +214,8 @@ class GameEngine:
     # Starts the day phase with discussion
     def start_day(self) -> List[ChatEvent]:
         self.phase = "JourDiscussion"
-        events = [ChatEvent("Système", f"Début du Jour {self.day_count}.", True)]
-        events += self._generate_day_discussion(n_messages=8)
-
-        return events
+        # Only return system message - actual messages will be generated on-demand by GameScreen
+        return [ChatEvent("Système", f"Début du Jour {self.day_count}.", True)]
 
     # Starts the voting phase
     def start_vote(self) -> List[ChatEvent]:
