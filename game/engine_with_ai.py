@@ -135,6 +135,7 @@ class GameEngine:
         self.rng = random.Random(seed)
         self.day_count = 1
         self.phase = "JourDiscussion"
+        self.supports_streaming_discussion = False
 
         # Load AI player names from JSON
         with open("data/ai_names.json", "r", encoding="utf-8") as f:
@@ -307,7 +308,7 @@ class GameEngine:
     def start_vote(self) -> List[ChatEvent]:
         """Démarre la phase de vote"""
         self.phase = "JourVote"
-        return [ChatEvent("Système", "Vote : clique sur le bouton bleu puis confirme.", True)]
+        return [ChatEvent("Système", "Vote : clique sur le bouton \"Voter\" puis confirme.", True)]
 
     def cast_vote(self, target_index: int) -> List[ChatEvent]:
         """Élimine un joueur par vote"""

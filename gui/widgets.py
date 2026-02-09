@@ -330,11 +330,11 @@ class PlayerListPanel:
     # Vote button rectangle for a specific row
     def _vote_rect_for_row(self, idx: int) -> pygame.Rect:
         row = self._row_rect(idx)
-        size = 22
-        
-        x = row.right - 10 - 100 - 12 - size  # 100 for note button width + 12 gap
-        y = row.y + (row.height - size) // 2
-        return pygame.Rect(x, y, size, size)
+        w, h = 76, 30
+        x = row.right - 10 - 100 - 12 - w
+        y = row.y + (row.height - h) // 2
+        return pygame.Rect(x, y, w, h)
+
 
     # Handles events for the player list panel
     def handle_event(self, event):
@@ -400,7 +400,7 @@ class PlayerListPanel:
 
         # vote hover
         if self.show_vote_buttons and self._vote_rect_for_row(idx).collidepoint(mx, my):
-            return f"Vote (sélection)\nClique pour sélectionner {p['name']}"
+            return f"Voter\nSélectionner {p['name']} comme cible"
 
         # note hover
         note_rect = self._note_rect_for_row(idx)
@@ -411,6 +411,23 @@ class PlayerListPanel:
 
         return ""
 
+    # Determines the color for a player's name based on their note and alive status
+    def _name_color_for_note(self, p: dict) -> tuple[int, int, int]:
+        if not p.get("alive", True):
+            return (120, 120, 120)
+
+        note = p.get("note", 0)
+
+        # Mapping notes to colors: 0=neutre, 1=gentil, 2=suspect, 3=loup
+        if note == 3:
+            return (220, 70, 70)
+        if note == 1:
+            return (90, 200, 90)
+        if note == 2:
+            return (240, 170, 60)
+
+        # Default color based on player name
+        return (230, 230, 230)
 
     # Draws the player list panel
     def draw(self, surface):
@@ -434,20 +451,55 @@ class PlayerListPanel:
 
             pygame.draw.rect(surface, (45, 45, 52), row_rect, border_radius=10)
 
-            name_color = (220, 220, 220) if p["alive"] else (140, 140, 140)
-            name_label = self.font.render(p["name"], True, name_color)
+            # Player name with color based on note and alive status
+            name_col = self._name_color_for_note(p)
+            name_label = self.font.render(p["name"], True, name_col)
+
             surface.blit(name_label, (row_rect.x + 10, row_rect.y + 8))
 
             # Draw vote button and note badge if alive
             if p["alive"]:
                 if self.show_vote_buttons:
                     vr = self._vote_rect_for_row(i)
-                    pygame.draw.ellipse(surface, (40, 160, 220), vr)
-                    pygame.draw.ellipse(surface, (210, 210, 210), vr, 2)
 
-                    # Icon (simple check mark)
+                    # Colors for vote button states
+                    base = (230, 150, 40)
+                    hover = (255, 205, 110)
+                    border = (210, 210, 210)
+                    hover_border = (255, 245, 220)
+                    text_col = (25, 25, 25)
+                    selected_bg = (200, 120, 30)
+
+                    mx, my = pygame.mouse.get_pos()
+                    is_hover = vr.collidepoint(mx, my) and vp.collidepoint(mx, my)
+
+                    # Draw button background with hover and selection states
+                    draw_rect = vr.inflate(4, 2) if is_hover else vr  # +4px, +2px on hover for a "pop" effect
+                    if is_hover:
+                        bg = hover
+                    elif self.selected_vote_index == i:
+                        bg = selected_bg
+                    else:
+                        bg = base
+
+
+                    pygame.draw.rect(surface, bg, draw_rect, border_radius=10)
+
+                    # Border with stronger highlight if selected, else hover effect, else normal
                     if self.selected_vote_index == i:
-                        pygame.draw.ellipse(surface, (240, 240, 240), vr.inflate(6, 6), 2)
+                        # selected: strong highlight + inner glow
+                        pygame.draw.rect(surface, (255, 240, 210), draw_rect, 3, border_radius=10)
+                    elif is_hover:
+                        # hover only: subtle highlight
+                        pygame.draw.rect(surface, hover_border, draw_rect, 3, border_radius=10)
+                        pygame.draw.rect(surface, (120, 90, 40), draw_rect.inflate(4, 4), 2, border_radius=12)
+                    else:
+                        pygame.draw.rect(surface, border, draw_rect, 2, border_radius=10)
+
+                    # Text centered in the button
+                    lab = self.small_font.render("Voter", True, text_col)
+                    surface.blit(lab, lab.get_rect(center=draw_rect.center))
+
 
 
 
@@ -517,3 +569,107 @@ class Tooltip:
         for r in rendered:
             surface.blit(r, (x + self.padding, yy))
             yy += r.get_height() + 2
+
+
+
+# Text input widget with optional password masking and reveal toggle
+class TextInput:
+    def __init__(self, rect, font, placeholder="", mask=False):
+        self.rect = pygame.Rect(rect)
+        self.font = font
+        self.placeholder = placeholder
+        self.mask = mask
+        self.text = ""
+        self.active = False
+        self.cursor_timer = 0.0
+        self.show_cursor = True
+
+        self.reveal = False  # if True, show actual text instead of masking
+
+        # Toggle button rectangle for password reveal (initialized later since it depends on rect size)
+        self.toggle_rect = pygame.Rect(0, 0, 0, 0)
+
+    # Handles events for the text input, including typing and password reveal toggle
+    def handle_event(self, event):
+        if self.mask:
+            self.toggle_rect = pygame.Rect(self.rect.right - 46, self.rect.y + 6, 40, self.rect.height - 12)
+
+        # Handle mouse clicks for activating the input and toggling password reveal
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if self.mask and self.toggle_rect.collidepoint(event.pos):
+                self.reveal = not self.reveal
+                return None
+
+            self.active = self.rect.collidepoint(event.pos)
+
+        # Handle keyboard input when active, including paste (Ctrl+V / Cmd+V), backspace, and enter
+        if event.type == pygame.KEYDOWN and self.active:
+            if (event.key == pygame.K_v) and (event.mod & pygame.KMOD_CTRL or event.mod & pygame.KMOD_META):
+                try:
+                    clip = pygame.scrap.get(pygame.SCRAP_TEXT)
+                    if clip:
+                        pasted = clip.decode("utf-8", errors="ignore")
+                        pasted = pasted.replace("\x00", "")
+                        pasted = pasted.replace("\r", "")
+                        pasted = pasted.replace("\n", "")
+                        pasted = pasted.strip()
+
+                        self.text += pasted
+                except Exception:
+                    pass
+
+            elif event.key == pygame.K_BACKSPACE:
+                self.text = self.text[:-1]
+
+            elif event.key == pygame.K_RETURN:
+                return "enter"
+
+            else:
+                if event.unicode and len(event.unicode) == 1:
+                    self.text += event.unicode
+
+        return None
+
+    # Updates the cursor blinking state
+    def update(self, dt):
+        if self.active:
+            self.cursor_timer += dt
+            if self.cursor_timer >= 0.5:
+                self.cursor_timer = 0.0
+                self.show_cursor = not self.show_cursor
+        else:
+            self.show_cursor = False
+
+    # Draws the text input on the surface, including masking and reveal toggle if applicable
+    def draw(self, surface):
+        bg = (35, 35, 40) if not self.active else (45, 45, 55)
+        pygame.draw.rect(surface, bg, self.rect, border_radius=10)
+        pygame.draw.rect(surface, (180, 180, 180), self.rect, 2, border_radius=10)
+
+        display = self.text
+        if self.mask and self.text and not self.reveal:
+            display = "*" * len(self.text)
+
+
+        if not display and not self.active and self.placeholder:
+            label = self.font.render(self.placeholder, True, (140, 140, 140))
+        else:
+            display = display.replace("\x00", "")
+            label = self.font.render(display, True, (240, 240, 240))
+
+        x = self.rect.x + 12
+        y = self.rect.y + (self.rect.height - label.get_height()) // 2
+        surface.blit(label, (x, y))
+
+        if self.active and self.show_cursor:
+            cursor_x = x + label.get_width() + 2
+            pygame.draw.line(surface, (240, 240, 240), (cursor_x, self.rect.y + 10), (cursor_x, self.rect.bottom - 10), 2)
+        
+        # Button to toggle password reveal
+        if self.mask:
+            pygame.draw.rect(surface, (60, 60, 70), self.toggle_rect, border_radius=10)
+            pygame.draw.rect(surface, (160, 160, 160), self.toggle_rect, 2, border_radius=10)
+
+            label_text = "K" if not self.reveal else "NA"
+            lab = self.font.render(label_text, True, (240, 240, 240))
+            surface.blit(lab, lab.get_rect(center=self.toggle_rect.center))

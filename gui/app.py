@@ -22,6 +22,10 @@ class App:
         self.screen = pygame.display.set_mode((w, h))
         pygame.display.set_caption("Loup-Garou IA")
         self.clock = pygame.time.Clock()
+
+        # Initialize pygame scrap for clipboard access (used in some screens)
+        from pygame import scrap
+        scrap.init()
         
         # Music tracks for different screens
         self.music_tracks = {

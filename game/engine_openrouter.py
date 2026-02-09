@@ -15,6 +15,8 @@ from ai.client import OpenRouterClient, OpenRouterClientConfig
 from game.structure_ai import Player
 from game.agent import Agent
 from game.context_manager import GameContextManager
+import game.constants
+
 
 # Data class for chat events
 @dataclass
@@ -35,16 +37,20 @@ class GameEngine:
 
         self.day_count = 1
         self.phase = "JourDiscussion"
+        self.supports_streaming_discussion = False
 
         # Load AI names
         with open("data/ai_names.json", "r", encoding="utf-8") as f:
-            data = json.load(f)
-        self.ai_names = data["prenoms"]
+            self.characters_data = json.load(f)["characters"]
+
 
         # Initialize OpenRouter client
-        key = os.getenv("OPENROUTER_API_KEY")
-        if key is None:
-            raise ValueError("OPENROUTER_API_KEY environment variable not set")
+        # os.getenv("OPENROUTER_API_KEY")
+        key = getattr(game.constants, "OPENROUTER_API_KEY", "") or ""
+        key = key.strip()
+        if not key or "TON_API_KEY" in key:
+            raise ValueError("OPENROUTER_API_KEY manquante / invalide")
+
         self.client = OpenRouterClient(OpenRouterClientConfig(key))
         self.context_manager = GameContextManager()
 
@@ -78,22 +84,23 @@ class GameEngine:
 
     # Creates players with assigned roles
     def _create_players(self, num_players: int) -> List[Player]:
-        names = self.rng.sample(self.ai_names, num_players)
+        selected_chars = self.rng.sample(self.characters_data, num_players)
         num_wolves = max(1, num_players // 4)
-
-        # Map roles to match the OpenRouter agent expectations
-        role_mapping = {
-            "loup": "Loup-Garou",
-            "villageois": "Villageois"
-        }
 
         roles = ["loup"] * num_wolves + ["villageois"] * (num_players - num_wolves)
         self.rng.shuffle(roles)
 
-        # Create Player instances
         return [
-            Player(name=n, role=r, alive=True, note=0) for n, r in zip(names, roles)
+            Player(
+                name=char["name"],
+                role=r,
+                alive=True,
+                note=0,
+                voice_id=char.get("voice_id", "JBFqnCBsd6RMkjVDRZzb"),
+            )
+            for char, r in zip(selected_chars, roles)
         ]
+
 
     # Helpers to get alive player indexes
     def alive_indexes(self) -> List[int]:
@@ -242,7 +249,7 @@ class GameEngine:
         return [
             ChatEvent(
                 "Système",
-                "Vote : clique sur le bouton bleu d'une IA vivante pour l'éliminer.",
+                "Vote : clique sur le bouton \"Voter\" d'une IA vivante pour l'éliminer.",
                 True,
             )
         ]

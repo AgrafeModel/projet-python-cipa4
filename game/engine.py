@@ -44,6 +44,7 @@ class GameEngine:
 
         self.day_count = 1  # Start with day 1
         self.phase = "JourDiscussion"  # Start with day phase for discussion
+        self.supports_streaming_discussion = True
 
         with open("data/ai_names.json", "r", encoding="utf-8") as f:
             self.characters_data = json.load(f)["characters"]
@@ -223,7 +224,7 @@ class GameEngine:
         return [
             ChatEvent(
                 "Système",
-                "Vote : clique sur le bouton bleu d'une IA vivante pour l'éliminer.",
+                "Vote : clique sur le bouton \"Voter\" d'une IA vivante pour l'éliminer.",
                 True,
             )
         ]
