@@ -1,5 +1,5 @@
 from openai import OpenAI
-from openrouter import dataclass
+from dataclasses import dataclass
 import json
 
 @dataclass
