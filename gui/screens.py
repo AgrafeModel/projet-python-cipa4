@@ -7,6 +7,8 @@
 import pygame
 import threading
 import queue
+import time
+
 
 from gui.widgets import Button, Stepper, ChatBox, PlayerListPanel, Tooltip, TextInput
 from game.engine_with_ai import GameEngine as GeminiEngine
@@ -986,77 +988,311 @@ class OllamaErrorScreen(Screen):
         super().__init__(app)
         self.error_message = error_message
         self.previous_screen = previous_screen
-        
+
+        # Fonts
         self.title_font = pygame.font.SysFont(None, 48)
         self.font = pygame.font.SysFont(None, 32)
         self.small_font = pygame.font.SysFont(None, 24)
 
-        # Return button
-        self.return_btn = Button(
-            rect=(app.w // 2 - 100, app.h // 2 + 150, 200, 50),
-            text="Retour",
-            font=self.font
+        # Functions from ollama_installer module (injected for easier testing/mocking)
+        from game.ollama_installer import (
+            is_ollama_running,
+            has_model,
+            open_ollama_download,
+            pull_model_async,
         )
-        
-        # Retry button
+        self._is_ollama_running = is_ollama_running
+        self._has_model = has_model
+        self._open_ollama_download = open_ollama_download
+        self._pull_model_async = pull_model_async
+
+        # State
+        self.status_text = ""
+        self.is_downloading = False
+
+        # Checker thread state
+        self._ollama_ok = False
+        self._model_ok = False
+        self._stop_checker = False
+        self._checker_thread = None
+        self._start_checker_thread()
+
+        # Dots animation for download status
+        self._dots_t = 0.0
+        self._dots = ""
+
+        # Lock to prevent status text updates during critical operations (like starting a download), to avoid overwriting important messages with automatic status updates from the checker thread. When locked, the checker thread will not update the status text, allowing us to show specific messages related to the current operation without them being overwritten by the periodic checks.
+        self._status_lock = False
+        self._status_lock_timer = 0.0
+
+        # Progress tracking for model download (if needed in the future, currently we just show an indeterminate "Downloading..." status without progress percentage, but this can be extended to show actual progress if the pull_model_async function provides that information through callbacks or a progress object). For now, we just have a placeholder for progress tracking in case we want to implement it later.
+        self.progress = None
+        self.last_status_line = ""
+
+        # Flag to block quitting the screen while a critical operation is in progress (like downloading the model), to prevent the user from accidentally leaving the screen and interrupting the operation. When True, we can ignore quit events or show a confirmation dialog if the user tries to leave while an important operation is still ongoing.
+        self.block_quit = False
+
+        # Buttons (anchored near bottom)
+        cx = app.w // 2
+        btn_w, btn_h = 360, 50
+        base_y = app.h - 280
+        gap = 16
+
+        self.install_btn = Button(
+            rect=(cx - btn_w // 2, base_y, btn_w, btn_h),
+            text="Installer Ollama",
+            font=self.font,
+            tooltip="Ouvre la page officielle de téléchargement d'Ollama"
+        )
+
+        self.pull_model_btn = Button(
+            rect=(cx - btn_w // 2, base_y + (btn_h + gap), btn_w, btn_h),
+            text="Télécharger Mistral (~4 Go)",
+            font=self.font,
+            tooltip="Télécharge le modèle requis (ollama pull mistral)"
+        )
+
         self.retry_btn = Button(
-            rect=(app.w // 2 - 100, app.h // 2 + 80, 200, 50),
+            rect=(cx - btn_w // 2, base_y + 2 * (btn_h + gap), btn_w, btn_h),
             text="Réessayer",
-            font=self.font
+            font=self.font,
+            tooltip="Vérifie Ollama + modèle, puis relance"
         )
-    
+
+        self.return_btn = Button(
+            rect=(cx - btn_w // 2, base_y + 3 * (btn_h + gap), btn_w, btn_h),
+            text="Retour",
+            font=self.font,
+            tooltip="Retour à la sélection"
+        )
+
+        # Initial refresh (so pull button can be disabled immediately)
+        self._refresh_availability()
+
+    # Helper to set status text with optional lock to prevent overwriting by checker thread. This allows us to show specific messages related to the current operation (like "Downloading...") without them being overwritten by the periodic status updates from the checker thread, which could cause confusion if they overwrite important messages with more generic status updates.
+    def _set_status(self, text: str, lock_seconds: float = 0.0):
+        self.status_text = text
+        if lock_seconds > 0:
+            self._status_lock = True
+            self._status_lock_timer = lock_seconds
+
+    # Starts a background thread that periodically checks if Ollama is running and if the required model is available, updating the internal state accordingly. This allows us to keep the UI responsive and automatically update the availability status without blocking the main thread, especially since checking for Ollama and the model might involve some I/O or take a bit of time.
+    def _start_checker_thread(self):
+        def loop():
+            while not self._stop_checker:
+                try:
+                    ollama_ok = self._is_ollama_running()
+                    model_ok = self._has_model("mistral") if ollama_ok else False
+
+                    self._ollama_ok = ollama_ok
+                    self._model_ok = model_ok
+                except Exception:
+                    self._ollama_ok = False
+                    self._model_ok = False
+
+                time.sleep(0.6)
+
+        import time
+        self._checker_thread = threading.Thread(target=loop, daemon=True)
+        self._checker_thread.start()
+
+    # Helper to refresh the availability status of Ollama and the model, enabling/disabling buttons accordingly. This is called periodically by the checker thread to update the UI based on the current availability of Ollama and the model, allowing us to enable or disable the "Download Model" button depending on whether Ollama is running and whether the model is already installed, and to show appropriate status messages to guide the user on what they need to do.
+    def _refresh_availability(self):
+        ollama_ok = self._is_ollama_running()
+        model_ok = self._has_model("mistral") if ollama_ok else False
+
+        # Enable/disable pull button depending on availability
+        self.pull_model_btn.enabled = (ollama_ok and not model_ok and not self.is_downloading)
+
+        # Optional: small status helper
+        if not ollama_ok:
+            # keep existing error_message visible; status is just a helper
+            if not self.status_text:
+                self.status_text = "Ollama n'est pas lancé."
+        else:
+            if model_ok and not self.is_downloading:
+                self.status_text = "Ollama est prêt. Cliquez sur Réessayer."
+
+    # Updates the screen, including handling status lock timing and updating button states based on current availability and downloading status. This is called every frame to update the UI, allowing us to manage the timing of status messages (like showing "Downloading..." for a certain duration without it being overwritten by the checker thread), and to enable or disable buttons based on whether Ollama is running, whether the model is available, and whether a download is currently in progress.
+    def update(self, dt: float):
+        # Update status lock timer
+        if self._status_lock:
+            self._status_lock_timer -= dt
+            if self._status_lock_timer <= 0:
+                self._status_lock = False
+
+        # Update availability status from checker thread
+        disabled = self.is_downloading
+        self.install_btn.enabled = not disabled
+        self.pull_model_btn.enabled = not disabled and self._ollama_ok and not self._model_ok
+        self.retry_btn.enabled = not disabled
+        self.return_btn.enabled = not disabled
+
+        # Animate dots for downloading status
+        if self.is_downloading:
+            self._dots_t += dt
+            if self._dots_t >= 0.35:
+                self._dots_t = 0.0
+                self._dots = "." if self._dots == "" else self._dots + "."
+                if len(self._dots) > 3:
+                    self._dots = ""
+
+        # Update status text based on current availability and downloading status, but only if not locked by a critical operation (like starting a download), to avoid overwriting important messages with automatic status updates from the checker thread. This allows us to show specific messages related to the current operation without them being overwritten by the periodic checks, while still providing helpful status updates when not in the middle of an important operation.
+        if not self._ollama_ok:
+            if "téléchargement" not in self.status_text.lower():
+                self.status_text = "Ollama n'est pas lancé."
+        elif self._model_ok:
+            self.status_text = "Ollama est prêt. Cliquez sur Réessayer."
+            if self.is_downloading or self._status_lock:
+                return
+        else:
+            self.status_text = "Ollama OK. Téléchargez le modèle Mistral."
+            if self.is_downloading or self._status_lock:
+                return
+
+    # Handles events for the Ollama error screen, including button clicks and key presses, while also blocking certain events during critical operations like downloading to prevent interruptions. This allows us to manage user interactions with the screen, providing appropriate responses to button clicks (like opening the download page, starting the model download, retrying the check, or returning to the previous screen), while also preventing the user from accidentally interrupting important operations by blocking certain events (like quitting or starting another operation) while a critical operation is in progress.
     def handle_event(self, event):
-        if self.return_btn.handle_event(event):
-            self.app.set_screen(self.previous_screen)
-        
+        # Block certain events while downloading to prevent interruptions
+        if self.is_downloading:
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                return
+            if event.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP):
+                return
+
+        # Handle button events
+        if self.install_btn.handle_event(event):
+            self._open_ollama_download()
+            self.status_text = "Page de téléchargement ouverte."
+            return
+
+        # Start model download if button clicked, with appropriate checks and status updates. This initiates the model download process when the user clicks the "Download Model" button, but only if Ollama is running and the model is not already available, and it provides status updates to inform the user about the progress of the download, while also blocking certain interactions during the download to prevent interruptions.
+        if self.pull_model_btn.handle_event(event):
+            if not self._is_ollama_running():
+                self.status_text = "Ollama n'est pas lancé."
+                return
+
+            if self.is_downloading:
+                return
+
+            self.is_downloading = True
+            self.block_quit = True
+            self.pull_model_btn.text = "Téléchargement… (patientez)"
+
+            # Call the asynchronous pull function with callbacks for completion, error handling, progress updates, and status updates. This allows us to start the model download in the background without blocking the UI, and to update the UI based on the progress and status of the download through the provided callbacks, giving the user feedback on what's happening during the download process.
+            def done():
+                self.is_downloading = False
+                self.block_quit = False
+                self.pull_model_btn.text = "Télécharger Mistral (~4 Go)"
+                self.status_text = "Modèle téléchargé. Cliquez sur Réessayer."
+
+            # Handle errors during the download process, updating the status text and resetting the downloading state to allow the user to try again or take other actions. This ensures that if something goes wrong during the download (like a network error, insufficient disk space, or an issue with Ollama), we can inform the user about the error and allow them to recover without leaving them stuck in a broken state.
+            def error(msg):
+                self.is_downloading = False
+                self.block_quit = False
+                self.pull_model_btn.text = "Télécharger Mistral (~4 Go)"
+                self.status_text = f"Erreur téléchargement : {msg}"
+
+            # Handle progress updates if the pull_model_async function provides that information through callbacks, allowing us to show actual progress percentage in the UI instead of just an indeterminate "Downloading..." status. This can give the user a better sense of how long the download will take and how it's progressing, especially for large models where the download time might be significant.
+            def on_progress(pct: int):
+                self.progress = pct
+
+            # Handle status updates from the pull_model_async function, allowing us to show specific status messages related to the download process (like "Connecting to server...", "Downloading files...", "Finalizing installation...", etc.) if that information is available through callbacks, giving the user more detailed feedback on what's happening during the download process. For now, we just capture the last status line and display it above the progress bar, but this can be extended to show a history of status messages if desired.
+            def on_status(line: str):
+                self.last_status_line = line[:60]
+
+            # Start the asynchronous model download process with the defined callbacks for completion, error handling, progress updates, and status updates. This initiates the download in the background and allows us to update the UI based on the progress and status of the download through the provided callbacks, giving the user feedback on what's happening during the download process.
+            self._pull_model_async("mistral", on_done=done, on_error=error, on_progress=on_progress, on_status=on_status)
+            return
+
+        # Handle retry button click, checking if Ollama and the model are now available, and transitioning back to the previous screen if they are, or showing an updated status message if they're still not available. This allows the user to easily check if they've resolved the issues (like starting Ollama or completing the model download) and to proceed once everything is ready, while also providing feedback if they still need to take action.
         if self.retry_btn.handle_event(event):
-            # Re-check Ollama availability before retrying
-            is_available, message = check_ollama_availability()
-            if not is_available:
-                # Still not available, update error message and stay on error screen
-                self.error_message = message
+            if self._ollama_ok and self._model_ok:
+                self._stop_checker = True
+                self.app.set_screen(self.previous_screen)
             else:
-                # Now available, start the game
-                if hasattr(self.previous_screen, 'num_players'):
-                    num_players = self.previous_screen.num_players.value
-                    self.app.set_screen(GameScreen(self.app, num_players))
-                else:
-                    self.app.set_screen(self.previous_screen)
-    
+                self.status_text = "Toujours indisponible : lance Ollama et/ou installe Mistral."
+            return
+
+        if self.return_btn.handle_event(event):
+            self._stop_checker = True
+            from gui.screens import SetupScreen
+            self.app.set_screen(SetupScreen(self.app))
+            return
+
+
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            from gui.screens import SetupScreen
+            self.app.set_screen(SetupScreen(self.app))
+
+    # Draws the Ollama error screen, showing the error message, instructions for resolving the issue, status updates, and buttons for actions like installing Ollama, downloading the model, retrying the check, or returning to the previous screen. This provides a user-friendly interface to help users understand what went wrong with Ollama, how to fix it, and to take appropriate actions to resolve the issue and proceed with the game.
     def draw(self, surface):
         surface.fill((25, 15, 15))  # Dark red background
-        
+
+        cx = self.app.w // 2
+
         # Title
         title = self.title_font.render("Erreur Ollama", True, (255, 100, 100))
-        title_rect = title.get_rect(center=(self.app.w // 2, self.app.h // 2 - 100))
-        surface.blit(title, title_rect)
-        
-        # Error message
-        y_offset = 0
-        for line in self.error_message.split('\n'):
-            if line.strip():
-                error_text = self.font.render(line.strip(), True, (255, 200, 200))
-                error_rect = error_text.get_rect(center=(self.app.w // 2, self.app.h // 2 - 40 + y_offset))
-                surface.blit(error_text, error_rect)
-                y_offset += 35
-        
+        surface.blit(title, title.get_rect(center=(cx, 120)))
+
+        # Error message (top)
+        y = 170
+        for line in self.error_message.split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            t = self.small_font.render(line, True, (255, 200, 200))
+            surface.blit(t, t.get_rect(center=(cx, y)))
+            y += 26
+
         # Instructions
         instructions = [
-            "Assurez-vous que:",
+            "Assurez-vous que :",
             "• Ollama est lancé (ollama serve)",
             "• Un modèle est installé (ollama pull mistral)",
-            "• La configuration est correcte",
-            "",
-            "Sans Ollama, le jeu ne peut pas démarrer."
+            "• Le port 11434 est accessible",
         ]
-        
-        y_offset = 30
+        y = 200
         for instruction in instructions:
             inst_text = self.small_font.render(instruction, True, (200, 200, 200))
-            inst_rect = inst_text.get_rect(center=(self.app.w // 2, self.app.h // 2 + y_offset))
-            surface.blit(inst_text, inst_rect)
-            y_offset += 25
-        
+            surface.blit(inst_text, inst_text.get_rect(center=(cx, y)))
+            y += 24
+
+        # Status text (just above buttons)
+        if self.status_text:
+            st = self.small_font.render(self.status_text, True, (235, 235, 235))
+            surface.blit(st, st.get_rect(center=(cx, 430)))
+
+        # Progress bar area
+        bar_w = 520
+        bar_h = 18
+        bar_x = cx - bar_w // 2
+        bar_y = self.install_btn.rect.y - 70
+
+
+        if self.is_downloading:
+            # background
+            pygame.draw.rect(surface, (40, 40, 45), (bar_x, bar_y, bar_w, bar_h), border_radius=8)
+            pygame.draw.rect(surface, (160, 160, 160), (bar_x, bar_y, bar_w, bar_h), 2, border_radius=8)
+
+            if self.progress is not None:
+                fill = int(bar_w * (self.progress / 100.0))
+                pygame.draw.rect(surface, (220, 120, 80), (bar_x, bar_y, fill, bar_h), border_radius=8)
+
+                pct_text = self.small_font.render(f"{self.progress}%", True, (235, 235, 235))
+                surface.blit(pct_text, pct_text.get_rect(center=(cx, bar_y - 18)))
+            else:
+                # fallback indeterminate animation
+                t = (pygame.time.get_ticks() % 1200) / 1200.0
+                block_w = 90
+                bx = bar_x + int((bar_w - block_w) * t)
+                pygame.draw.rect(surface, (220, 120, 80), (bx, bar_y, block_w, bar_h), border_radius=8)
+
+            if self.last_status_line:
+                st = self.small_font.render(self.last_status_line, True, (210, 210, 210))
+                surface.blit(st, st.get_rect(center=(cx, bar_y + 32)))
+
         # Buttons
+        self.install_btn.draw(surface)
+        self.pull_model_btn.draw(surface)
         self.retry_btn.draw(surface)
         self.return_btn.draw(surface)

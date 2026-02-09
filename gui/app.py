@@ -110,8 +110,12 @@ class App:
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
+                    # if the current screen has block_quit=True, ignore quit events (e.g. during download)
+                    if getattr(self.current_screen, "block_quit", False):
+                        continue
                     pygame.quit()
                     sys.exit()
+
                 self.current_screen.handle_event(event)
 
             self.current_screen.update(dt)
