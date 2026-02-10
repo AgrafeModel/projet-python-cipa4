@@ -26,6 +26,10 @@ class App:
         # Initialize pygame scrap for clipboard access (used in some screens)
         from pygame import scrap
         scrap.init()
+        try:
+            scrap.set_mode(pygame.SCRAP_CLIPBOARD)
+        except Exception:
+            pass
         
         # Music tracks for different screens
         self.music_tracks = {
