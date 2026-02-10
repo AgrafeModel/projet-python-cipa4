@@ -167,3 +167,19 @@ def pull_model_async(model_name: str, on_done=None, on_error=None, on_progress=N
 
     # Start the worker thread to pull the model without blocking the main application
     threading.Thread(target=worker, daemon=True).start()
+
+# Removes a model from Ollama in a background thread, used for cleanup if the user quits during a download to avoid leaving a broken state
+def rm_model_async(model: str):
+    # Import here to avoid circular imports if we call this from the screens.py cleanup while we're still importing the ollama installer for the pull_model_async function
+    import subprocess
+
+    def worker():
+        ollama_path = shutil.which("ollama") or "ollama"
+        cmd = [ollama_path, "rm", model]
+        print(f"[OLLAMA] Cleanup: {' '.join(cmd)}")
+        try:
+            subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace")
+        except Exception as e:
+            print(f"[OLLAMA] Cleanup exception: {e}")
+
+    threading.Thread(target=worker, daemon=True).start()

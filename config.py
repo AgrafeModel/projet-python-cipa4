@@ -26,7 +26,7 @@ def load_ollama_config() -> OllamaConfig:
     """Load Ollama configuration from environment variables with defaults."""
     base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     model = os.getenv("OLLAMA_MODEL", "mistral")
-    timeout_str = os.getenv("OLLAMA_TIMEOUT", "30")
+    timeout_str = os.getenv("OLLAMA_TIMEOUT", "180")
 
     try:
         timeout = float(timeout_str)

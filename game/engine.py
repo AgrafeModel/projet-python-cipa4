@@ -20,9 +20,6 @@ from ai.agent_ollama import Agent, AgentConfig, load_templates
 from ai.rules import PublicState
 from game.structure_ai import Player
 
-# TTS
-from game.tts_helper import speak_text
-
 import audio_config
 
 # Data class for chat events
@@ -44,7 +41,9 @@ class GameEngine:
 
         self.day_count = 1  # Start with day 1
         self.phase = "JourDiscussion"  # Start with day phase for discussion
-        self.supports_streaming_discussion = True
+        self.supports_streaming_discussion = False
+        self.use_background_generation = True  # to avoid blocking the UI during TTS generation, we use a background thread and queue system in tts_helper.py
+
 
         with open("data/ai_names.json", "r", encoding="utf-8") as f:
             self.characters_data = json.load(f)["characters"]
@@ -206,17 +205,15 @@ class GameEngine:
             # Update last speaker
             last_speaker = speaker
 
-            # ← Lecture audio du message
-            speaker_player = next(p for p in self.players if p.name == speaker)
-            speak_text(msg, voice_id=speaker_player.voice_id)
-
         return events
 
     # Starts the day phase with discussion
     def start_day(self) -> List[ChatEvent]:
         self.phase = "JourDiscussion"
-        # Only return system message - actual messages will be generated on-demand by GameScreen
-        return [ChatEvent("Système", f"Début du Jour {self.day_count}.", True)]
+        events = [ChatEvent("Système", f"Début du Jour {self.day_count}.", True)]
+        events += self._generate_day_discussion(n_messages=10)
+        return events
+
 
     # Starts the voting phase
     def start_vote(self) -> List[ChatEvent]:

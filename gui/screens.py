@@ -422,6 +422,10 @@ class GameScreen(Screen):
         self.pending_events = [] # events to display
         self.msg_delay = 0.55 # seconds between messages
         self._msg_timer = 0.0  # timer for message display
+
+        # Background generation state for API-based engines (like Ollama) to avoid blocking the UI while waiting for responses, especially during the initial start_day call which can take a long time. We use a queue to get results from the background thread when it finishes.
+        self._bg_queue = queue.Queue()
+        self._bg_loading = False
         
         # Generator for streaming message generation (one at a time from Ollama)
         self._message_generator = None
@@ -438,12 +442,22 @@ class GameScreen(Screen):
 
         # Start the game by calling start_day on the engine, which will return the initial events to display. For engines that support streaming discussion, we can call start_day directly and get a generator for events. For API-based engines that don't support streaming, we need to call start_day in a background thread to avoid blocking the UI while waiting for the response.
         if getattr(self.engine, "supports_streaming_discussion", False):
-            events = self.engine.start_day()
-            self._enqueue_events(events)
+            # For engines that support streaming discussion (like Ollama), we can call start_day directly to get the initial events and a generator for subsequent messages. We also show a "Generating..." message in the chat while waiting for the first messages to be generated, which will be replaced by the actual messages as they come in from the generator.
+            self.chat.add_message("Système", "Génération…", True, is_system=True)
+
+            # Ollama / engines : thread
+            if getattr(self.engine, "use_background_generation", False):
+                self._start_background_generation(self.engine.start_day)
+            else:
+                events = self.engine.start_day()
+                self._enqueue_events(events)
+
+            self._message_generator = self._create_message_generator() if getattr(self.engine, "supports_streaming_discussion", False) else None
         # API-based engine: start_day can take a long time, so we run it in a background thread and show a loading message in the meantime. Once the thread finishes, it will put the resulting events in the queue, which we will check in the update() method to display them and transition to the discussion phase.
         else:
             self._bg_loading = True
             self.chat.add_message("Système", "Chargement des messages…", True, is_system=True)
+            self._update_controls()
             self._start_background_generation_start_day()
 
         # For engines that support streaming discussion, we can create a message generator right away to start displaying messages one by one as they are generated. For API-based engines that don't support streaming, we will get all the messages at once when the background thread finishes, so we don't need a generator in that case.
@@ -456,6 +470,17 @@ class GameScreen(Screen):
 
         self._update_vote_buttons_visibility()
         self._update_controls()
+
+    # Starts a background thread to call a given function (like advance) on the engine for API-based engines, putting the resulting events in a queue when done. This is used for advancing the night phase or other phases that require waiting for the engine to generate messages, allowing us to keep the UI responsive and show a loading message in the meantime.
+    def _start_background_generation(self, fn):
+        self._bg_loading = True
+        def worker():
+            try:
+                events = fn()
+                self._bg_queue.put(("events", events))
+            except Exception as e:
+                self._bg_queue.put(("error", str(e)))
+        threading.Thread(target=worker, daemon=True).start()
 
     # Starts a background thread to call start_day on the engine for API-based engines, putting the resulting events in a queue when done. This allows us to show a loading message and keep the UI responsive while waiting for the engine to generate the initial messages for the day phase.
     def _start_background_generation_start_day(self):
@@ -472,6 +497,7 @@ class GameScreen(Screen):
     # Starts a background thread to call a given function (like advance) on the engine for API-based engines, putting the resulting events in a queue when done. This is used for advancing the night phase or other phases that require waiting for the engine to generate messages, allowing us to keep the UI responsive and show a loading message in the meantime.
     def _start_background_generation(self, fn):
         self._bg_loading = True
+        self._update_controls()
         def worker():
             try:
                 events = fn()
@@ -482,6 +508,24 @@ class GameScreen(Screen):
 
     # Updates the game screen
     def update(self, dt: float):
+        # Check if we are waiting for background generation to finish (for API-based engines) and if so, check the queue for results to display when ready. This allows us to keep the UI responsive and show loading messages while waiting for the engine to generate responses, especially during longer operations like start_day or advance for API-based engines.
+        if self._bg_loading:
+            try:
+                kind, payload = self._bg_queue.get_nowait()
+                self._bg_loading = False
+
+                if kind == "events":
+                    self._enqueue_events(payload)
+                    self._refresh_ui_players_from_engine()
+                    self._update_vote_buttons_visibility()
+                    self._update_controls()
+                else:
+                    self.chat.add_message("Système", f"Erreur Ollama: {payload}", True, is_system=True)
+
+                self._update_controls()
+            except queue.Empty:
+                pass
+
         if self._bg_loading:
             try:
                 # Check if the background thread has finished and put something in the queue
@@ -489,12 +533,14 @@ class GameScreen(Screen):
                 # When background generation finishes, we get the resulting events from the queue and display them, then transition to the discussion phase. If there was an error during generation, we display an error message in the chat.
                 if kind == "events":
                     self._bg_loading = False
+                    self._update_controls()
                     self._enqueue_events(payload)
                     self._refresh_ui_players_from_engine()
                     self._update_vote_buttons_visibility()
                     self._update_controls()
                 elif kind == "error":
                     self._bg_loading = False
+                    self._update_controls()
                     self.chat.add_message("Système", f"Erreur génération API: {payload}", True, is_system=True)
             except queue.Empty:
                 pass
@@ -642,8 +688,25 @@ class GameScreen(Screen):
     def _update_controls(self):
         self.player_list.show_vote_buttons = (self.engine.phase == "JourVote")
 
+        # Disable continue button if we're currently waiting for background generation to finish (for API-based engines), to prevent the player from trying to advance while we're still waiting for the engine to generate responses, which could cause confusion or issues with the flow. We will re-enable the continue button once the background generation finishes and we have the resulting events to display.
+        if self.engine.phase != "JourVote":
+            if getattr(self, "_bg_loading", False):
+                self.continue_btn.enabled = False
+                self.continue_btn.tooltip = "Génération en cours…"
+            else:
+                self.continue_btn.enabled = True
+                self.continue_btn.tooltip = "Continuer\nAvance la phase du jeu"
+
         # Vote phase controls update
         if self.engine.phase == "JourVote":
+            # Disable continue button if we're currently waiting for background generation to finish (for API-based engines), to prevent the player from trying to advance while we're still waiting for the engine to generate responses, which could cause confusion or issues with the flow. We will re-enable the continue button once the background generation finishes and we have the resulting events to display.
+            if getattr(self, "_bg_loading", False):
+                self.continue_btn.enabled = False
+                self.continue_btn.tooltip = "Génération en cours…"
+            else:
+                self.continue_btn.enabled = True
+                self.continue_btn.tooltip = "Continuer\nAvance la phase du jeu"
+
             # Check if a selection has been made
             has_selection = self.selected_vote_idx is not None
 
@@ -710,6 +773,9 @@ class GameScreen(Screen):
             return
 
         if self.engine.phase != "JourVote":
+            if getattr(self, "_bg_loading", False):
+                return
+
             if self.continue_btn.handle_event(event):
                 if self.pending_events:
                     while self.pending_events:
@@ -806,7 +872,7 @@ class GameScreen(Screen):
         self.chat.draw(surface)
 
         # Debug info
-        dbg = self.small_font.render("Debug : ESC=menu", True, (140, 140, 140))
+        dbg = self.small_font.render("Debug : ESC=menu  |  Tab=paramètres", True, (140, 140, 140))
         surface.blit(dbg, (self.chat_rect.x + 10, self.chat_rect.bottom - 24))
 
         # Bouton du moment
@@ -1008,6 +1074,7 @@ class OllamaErrorScreen(Screen):
 
         # State
         self.status_text = ""
+        self.model_name = "mistral"
         self.is_downloading = False
 
         # Checker thread state
@@ -1112,6 +1179,16 @@ class OllamaErrorScreen(Screen):
         else:
             if model_ok and not self.is_downloading:
                 self.status_text = "Ollama est prêt. Cliquez sur Réessayer."
+
+    # Cleanup when quitting the screen, including stopping the checker thread and optionally removing the model if a download was in progress, to ensure we don't leave a broken state if the user tries to quit while we're still downloading the model. This allows us to clean up any background threads and potentially remove partially downloaded models to avoid leaving the user's system in a broken state if they exit during a critical operation.
+    def on_quit(self):
+        if getattr(self, "is_downloading", False):
+            try:
+                from game.ollama_installer import rm_model_async
+                print("[QUIT] Download in progress -> removing model to cleanup...")
+                rm_model_async(self.model_name)
+            except Exception as e:
+                print(f"[QUIT] Cleanup failed: {e}")
 
     # Updates the screen, including handling status lock timing and updating button states based on current availability and downloading status. This is called every frame to update the UI, allowing us to manage the timing of status messages (like showing "Downloading..." for a certain duration without it being overwritten by the checker thread), and to enable or disable buttons based on whether Ollama is running, whether the model is available, and whether a download is currently in progress.
     def update(self, dt: float):
