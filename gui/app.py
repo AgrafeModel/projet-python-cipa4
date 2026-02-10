@@ -80,10 +80,10 @@ class App:
             
             pygame.mixer.music.load(music_path)
             pygame.mixer.music.set_volume(current_volume)
-            if music_path == "music/LG.mp3":
+            if music_path in {"music/LG.mp3", "music/menu2.mp3"}:
                 pygame.mixer.music.play(-1)  # Loop infinitely
             else:
-                pygame.mixer.music.play(1)
+                pygame.mixer.music.play()
             
             self.current_track = track_name
             print(f"♪ Now playing: {track_name} ({os.path.basename(music_path)})")
