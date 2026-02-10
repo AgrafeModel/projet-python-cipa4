@@ -712,9 +712,23 @@ class TextInput:
             # Paste (Ctrl+V / Cmd+V)
             if (event.key == pygame.K_v) and (event.mod & pygame.KMOD_CTRL or event.mod & pygame.KMOD_META):
                 try:
-                    clip = pygame.scrap.get(pygame.SCRAP_TEXT)
+                    clip = None
+                    clip_types = [pygame.SCRAP_TEXT]
+                    clip_types.append(getattr(pygame, "SCRAP_UTF8", None))
+                    clip_types.extend(["text/plain", "text/plain;charset=utf-8"])
+
+                    for t in clip_types:
+                        if t is None:
+                            continue
+                        clip = pygame.scrap.get(t)
+                        if clip:
+                            break
+
                     if clip:
-                        pasted = clip.decode("utf-8", errors="ignore")
+                        if isinstance(clip, bytes):
+                            pasted = clip.decode("utf-8", errors="ignore")
+                        else:
+                            pasted = str(clip)
                         pasted = pasted.replace("\x00", "").replace("\r", "").replace("\n", "").strip()
                         self._insert_text(pasted)
                 except Exception:
