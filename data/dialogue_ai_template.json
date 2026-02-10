@@ -2,7 +2,7 @@
   "common": {
     "connectors": ["Franchement,", "Honnêtement,", "Perso,", "Bon,", "Ok,", "Sincèrement,", "À chaud,", "De mon point de vue,"],
     "softeners": ["un peu", "plutôt", "vraiment", "assez", "clairement", "franchement", "grave", "pas mal"],
-    "endings": ["", ".", "…", " !", " ?"]
+    "endings": ["", ".", "…", " !"]
   },
   "villageois": {
     "accuse": [
@@ -30,16 +30,16 @@
       "{c} je préfère garder @{target} en vie pour avoir plus d'infos{e}"
     ],
     "question": [
-      "{c} @{target}, tu peux expliquer ton raisonnement{e}",
-      "{c} @{target}, tu te bases sur quoi exactement{e}",
-      "{c} @{target}, pourquoi tu vises cette personne et pas une autre{e}",
-      "{c} @{target}, tu as remarqué quoi de concret{e}",
-      "{c} @{target}, tu peux résumer ton point de vue en une phrase{e}",
-      "{c} @{target}, qu'est-ce qui te rend si sûr(e){e}",
-      "{c} @{target}, tu avais déjà cette idée avant ou c'est nouveau{e}",
-      "{c} @{target}, t'as un exemple précis à donner{e}",
-      "{c} @{target}, tu penses quoi de la piste alternative{e}",
-      "{c} @{target}, si tu te trompes, on fait quoi ensuite{e}"
+      "{c} @{target}, tu peux expliquer ton raisonnement ?",
+      "{c} @{target}, tu te bases sur quoi exactement ?",
+      "{c} @{target}, pourquoi tu vises cette personne et pas une autre ?",
+      "{c} @{target}, tu as remarqué quoi de concret ?",
+      "{c} @{target}, tu peux résumer ton point de vue en une phrase ?",
+      "{c} @{target}, qu'est-ce qui te rend si sûr ?",
+      "{c} @{target}, tu avais déjà cette idée avant ou c'est nouveau ?",
+      "{c} @{target}, t'as un exemple précis à donner ?",
+      "{c} @{target}, tu penses quoi de la piste alternative ?",
+      "{c} @{target}, si tu te trompes, on fait quoi ensuite ?"
     ],
     "hedge": [
       "{c} je n'ai rien de certain, j'observe{e}",
@@ -114,6 +114,18 @@
       "{c} @{target} pose les bonnes questions{e}",
       "{c} je suis {s} aligné avec @{target}{e}",
       "{c} ça me semble cohérent avec l'analyse de @{target}{e}"
+    ],
+    "questions": [
+      "{c} @{target}, tu peux expliquer ton raisonnement ?",
+      "{c} @{target}, tu te bases sur quoi exactement ?",
+      "{c} @{target}, pourquoi tu vises cette personne et pas une autre ?",
+      "{c} @{target}, tu as remarqué quoi de concret ?",
+      "{c} @{target}, tu peux résumer ton point de vue en une phrase ?",
+      "{c} @{target}, qu'est-ce qui te rend si sûr ?",
+      "{c} @{target}, tu avais déjà cette idée avant ou c'est nouveau ?",
+      "{c} @{target}, t'as un exemple précis à donner ?",
+      "{c} @{target}, tu penses quoi de la piste alternative ?",
+      "{c} @{target}, si tu te trompes, on fait quoi ensuite ?"
     ]
   },
   "system": {

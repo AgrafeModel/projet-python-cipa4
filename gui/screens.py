@@ -43,6 +43,9 @@ class SetupScreen(Screen):
         self.title_font = pygame.font.SysFont(None, 64)
         self.font = pygame.font.SysFont(None, 36)
 
+        audio_config.TTS_ENABLED = False
+        tts_helper.disable_and_stop()
+
         self.num_players = Stepper(
             x = app.w // 2 - 160,
             y = app.h // 2 - 30,
@@ -105,6 +108,9 @@ class ModeSelectScreen(Screen):
         super().__init__(app)
         self.previous_screen = previous_screen
         self.num_players = num_players
+
+        audio_config.TTS_ENABLED = False
+        tts_helper.disable_and_stop()
 
         self.title_font = pygame.font.SysFont(None, 54)
         self.font = pygame.font.SysFont(None, 28)
@@ -191,6 +197,9 @@ class ApiKeyScreen(Screen):
         self.mode = mode  # "openrouter" | "gemini"
         self.num_players = num_players
         self.previous_screen = previous_screen
+
+        audio_config.TTS_ENABLED = False
+        tts_helper.disable_and_stop()
 
         self.title_font = pygame.font.SysFont(None, 48)
         self.font = pygame.font.SysFont(None, 28)
@@ -322,6 +331,7 @@ class TTSKeyScreen(Screen):
         if self.skip_btn.handle_event(event):
             # désactiver TTS et lancer
             tts_helper.set_enabled(False)
+            tts_helper.disable_and_stop()
             self.app.set_screen(GameScreen(self.app, self.num_players, self.engine_cls))
             return
 
@@ -332,6 +342,7 @@ class TTSKeyScreen(Screen):
                 tts_helper.set_api_key(key)
                 tts_helper.set_enabled(True)
                 self.app.set_screen(GameScreen(self.app, self.num_players, self.engine_cls))
+                audio_config.TTS_ENABLED = True
             else:
                 self.msg = "Clé TTS invalide (ou ElevenLabs indisponible)."
             return
@@ -504,6 +515,20 @@ class GameScreen(Screen):
 
         self._update_vote_buttons_visibility()
         self._update_controls()
+
+        # Backgrounds
+        self.bg_day = pygame.image.load("assets/jour_background.png").convert()
+        self.bg_night = pygame.image.load("assets/nuit_background.png").convert()
+
+        # Scale to screen size once (important for perf)
+        self.bg_day = pygame.transform.scale(self.bg_day, (self.app.w, self.app.h))
+        self.bg_night = pygame.transform.scale(self.bg_night, (self.app.w, self.app.h))
+
+    # Helper method to get the appropriate background image based on the current phase of the game (day or night). This allows us to visually differentiate between day and night phases in the game by showing different backgrounds.
+    def _get_background(self):
+        if self.engine.phase == "Nuit":
+            return self.bg_night
+        return self.bg_day
 
     # Starts a background thread to call a given function (like advance) on the engine for API-based engines, putting the resulting events in a queue when done. This is used for advancing the night phase or other phases that require waiting for the engine to generate messages, allowing us to keep the UI responsive and show a loading message in the meantime.
     def _start_background_generation(self, fn):
@@ -808,6 +833,7 @@ class GameScreen(Screen):
                 return
 
             if self.quit_btn_confirm.handle_event(event):
+                tts_helper.disable_and_stop()
                 from gui.screens import SetupScreen
                 self.app.set_screen(SetupScreen(self.app))
                 return
@@ -904,10 +930,30 @@ class GameScreen(Screen):
         # Speak the message text using the TTS helper, specifying the voice ID for the player. This will play the message aloud using the appropriate voice if TTS is enabled and configured correctly.
         tts_helper.speak_text(ev.text, voice_id=voice_id)
 
+    # Helper method to draw a semi-transparent panel with rounded corners and an optional border, used for the info panel and quit confirmation modal. This allows us to have a consistent style for panels in the UI, with a nice background and border to make them stand out against the game background.
+    def _draw_panel(self, surface, rect, color=(30, 30, 35, 200), radius=14, border=True):
+        panel = pygame.Surface(rect.size, pygame.SRCALPHA)
+        pygame.draw.rect(panel, color, panel.get_rect(), border_radius=radius)
+
+        if border:
+            pygame.draw.rect(
+                panel,
+                (180, 180, 180, 220),
+                panel.get_rect(),
+                2,
+                border_radius=radius
+            )
+
+        surface.blit(panel, rect.topleft)
 
     # Updates the game screen
     def draw(self, surface):
-        surface.fill((15, 15, 18))
+        surface.blit(self._get_background(), (0, 0))
+
+        if self.engine.phase == "Nuit":
+            overlay = pygame.Surface((self.app.w, self.app.h), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 60))
+            surface.blit(overlay, (0, 0))
 
         # Info panel
         pygame.draw.rect(surface, (55, 55, 62), self.info_rect, border_radius=12)
@@ -980,6 +1026,9 @@ class EndScreen(Screen):
         self.title_font = pygame.font.SysFont(None, 72)
         self.font = pygame.font.SysFont(None, 28)
 
+        audio_config.TTS_ENABLED = False
+        tts_helper.disable_and_stop()
+
         # Store number of players
         self.num_players = num_players
         self.title = title
@@ -1011,14 +1060,17 @@ class EndScreen(Screen):
     # Handles events for the end screen
     def handle_event(self, event):
         if self.btn_home.handle_event(event):
+            tts_helper.disable_and_stop()
             self.app.set_screen(SetupScreen(self.app))
             return
 
         if self.btn_replay.handle_event(event):
-            self.app.set_screen(GameScreen(self.app, self.num_players, self.engine_cls))
+            tts_helper.disable_and_stop()
+            self.app.set_screen(ModeSelectScreen(self.app, self.num_players))
             return
 
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            tts_helper.disable_and_stop()
             self.app.set_screen(SetupScreen(self.app))
 
     # Draws the end screen
@@ -1130,6 +1182,9 @@ class OllamaErrorScreen(Screen):
         super().__init__(app)
         self.error_message = error_message
         self.previous_screen = previous_screen
+
+        audio_config.TTS_ENABLED = False
+        tts_helper.disable_and_stop()
 
         # Fonts
         self.title_font = pygame.font.SysFont(None, 48)

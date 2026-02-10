@@ -6,3 +6,6 @@ voice_volume = 0.8
 voice_channel = None
 
 voice_queue = None
+
+# TTS
+TTS_ENABLED = False

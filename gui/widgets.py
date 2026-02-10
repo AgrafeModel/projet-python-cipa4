@@ -213,8 +213,12 @@ class ChatBox:
 
     # Draws the chat box on the surface
     def draw(self, surface):
-        pygame.draw.rect(surface, (25, 25, 30), self.rect, border_radius=12)
+        bg = pygame.Surface((self.rect.width, self.rect.height), pygame.SRCALPHA)
+        bg.fill((25, 25, 30, 200))
+        surface.blit(bg, self.rect.topleft)
+
         pygame.draw.rect(surface, (180, 180, 180), self.rect, 2, border_radius=12)
+
 
         # Clip to chat box area for scrolling
         clip = surface.get_clip()
@@ -436,9 +440,12 @@ class PlayerListPanel:
 
     # Draws the player list panel
     def draw(self, surface):
-        pygame.draw.rect(surface, (35, 35, 40), self.rect, border_radius=12)
-        pygame.draw.rect(surface, (180, 180, 180), self.rect, 2, border_radius=12)
+        bg = pygame.Surface((self.rect.width, self.rect.height), pygame.SRCALPHA)
+        bg.fill((35, 35, 40, 200))
+        surface.blit(bg, self.rect.topleft)
 
+        pygame.draw.rect(surface, (180, 180, 180), self.rect, 2, border_radius=12)
+        
         # Title
         title = self.font.render("Joueurs", True, (235, 235, 235))
         surface.blit(title, (self.rect.x + self.padding, self.rect.y + 8))

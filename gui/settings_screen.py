@@ -15,6 +15,8 @@ class Slider:
         
         self.dragging = False
         self.hover = False
+
+        self.enabled = True
         
         # Couleurs
         self.track_color = (100, 100, 100)
@@ -25,6 +27,11 @@ class Slider:
         self.handle_radius = 10
         
     def handle_event(self, event):
+        if not self.enabled:
+            self.dragging = False
+            self.hover = False
+            return
+
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             handle_pos = self._get_handle_position()
             handle_rect = pygame.Rect(
@@ -64,29 +71,41 @@ class Slider:
         return (x, y)
     
     def draw(self, surface):
+        # Colors depending on enabled
+        if not self.enabled:
+            track_color = (70, 70, 70)
+            handle_color = (120, 120, 120)
+            label_color = (150, 150, 150)
+        else:
+            track_color = self.track_color
+            handle_color = self.handle_hover_color if self.hover else self.handle_color
+            label_color = self.label_color
+
         # Label
         if self.label:
-            label_surf = self.font.render(self.label, True, self.label_color)
+            label_surf = self.font.render(self.label, True, label_color)
             label_rect = label_surf.get_rect(
                 centerx=self.rect.centerx,
                 bottom=self.rect.top - 15
             )
             surface.blit(label_surf, label_rect)
-        
-        pygame.draw.rect(surface, self.track_color, self.rect, border_radius=5)
-        
+
+        # Track
+        pygame.draw.rect(surface, track_color, self.rect, border_radius=5)
+
+        # Handle
         handle_pos = self._get_handle_position()
-        handle_color = self.handle_hover_color if self.hover else self.handle_color
         pygame.draw.circle(surface, handle_color, handle_pos, self.handle_radius)
-        
+
         # % value
         value_text = f"{int(self.value * 100)}%"
-        value_surf = self.font.render(value_text, True, self.label_color)
+        value_surf = self.font.render(value_text, True, label_color)
         value_rect = value_surf.get_rect(
             centerx=self.rect.centerx,
             top=self.rect.bottom + 10
         )
         surface.blit(value_surf, value_rect)
+
 
 
 # ============================================================================
@@ -140,6 +159,7 @@ class SettingsScreen:
 
         # Sliders
         self.volume_slider.handle_event(event)
+        self.sound_slider.enabled = getattr(audio_config, "TTS_ENABLED", False)
         self.sound_slider.handle_event(event)
 
         # Music volume (live)
@@ -150,9 +170,10 @@ class SettingsScreen:
             pass
 
         # Voice volume (live, même son en cours)
-        audio_config.voice_volume = self.sound_slider.value
-        if audio_config.voice_channel:
-            audio_config.voice_channel.set_volume(audio_config.voice_volume)
+        if getattr(audio_config, "TTS_ENABLED", False):
+            audio_config.voice_volume = self.sound_slider.value
+            if audio_config.voice_channel:
+                audio_config.voice_channel.set_volume(audio_config.voice_volume)
 
         # Back button
         if self.back_button.handle_event(event):
@@ -187,6 +208,17 @@ class SettingsScreen:
         self.volume_slider.draw(surface)
 
         self.sound_slider.draw(surface)
+        if not getattr(audio_config, "TTS_ENABLED", False):
+            msg = self.small_font.render(
+                "Désactivé car la lecture vocale (TTS) n’est pas activée",
+                True,
+                (150, 150, 150)
+            )
+            msg_rect = msg.get_rect(
+                centerx=self.sound_slider.rect.centerx,
+                top=self.sound_slider.rect.bottom + 35
+            )
+            surface.blit(msg, msg_rect)
         
         self.back_button.draw(surface)
         

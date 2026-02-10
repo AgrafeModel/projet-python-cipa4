@@ -62,6 +62,9 @@ def set_enabled(value: bool):
     global _ENABLED
     _ENABLED = bool(value)
 
+    if not _ENABLED:
+        disable_and_stop()
+
 # Public function to update the ElevenLabs API key at runtime
 def set_api_key(new_key: str):
     # update constant + reset client
@@ -153,7 +156,9 @@ def speak_text(text: str, voice_id: str = "JBFqnCBsd6RMkjVDRZzb"):
         return
     if _ensure_client() is None:
         return
+
     audio_generation_queue.put((text, voice_id))
+
 
 # Public function to stop all currently playing voices and clear pending audio
 def stop_all_voices():
@@ -161,3 +166,24 @@ def stop_all_voices():
         audio_config.voice_channel.stop()
     with generation_lock:
         audio_ready_list.clear()
+
+# Public function to disable TTS functionality and stop any ongoing audio
+def disable_and_stop():
+    global _ENABLED
+    _ENABLED = False
+
+    # Stop current audio
+    if audio_config.voice_channel:
+        audio_config.voice_channel.stop()
+
+    # Clear pending audio
+    with generation_lock:
+        audio_ready_list.clear()
+
+    # Clear generation queue
+    while not audio_generation_queue.empty():
+        try:
+            audio_generation_queue.get_nowait()
+            audio_generation_queue.task_done()
+        except Exception:
+            break
