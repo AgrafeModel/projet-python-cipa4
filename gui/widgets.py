@@ -36,6 +36,11 @@ def generate_player_color(player_name: str) -> tuple[int, int, int]:
     
     return (r, g, b)
 
+# Loads and scales an icon from the given path to the specified size
+def load_icon(path, size):
+    icon = pygame.image.load(path).convert_alpha()
+    icon = pygame.transform.smoothscale(icon, size)
+    return icon
 
 # System message color (red for system messages)
 SYSTEM_COLOR = (255, 100, 100)
@@ -579,59 +584,171 @@ class TextInput:
         self.font = font
         self.placeholder = placeholder
         self.mask = mask
+
+        # Load icons for reveal toggle
+        self.icon_eye = load_icon("assets/eye.png", (22, 22))
+        self.icon_eye_slash = load_icon("assets/eye_slash.png", (22, 22))
+
         self.text = ""
         self.active = False
+
+        # cursor / selection
+        self.cursor_pos = 0  # position in self.text
         self.cursor_timer = 0.0
         self.show_cursor = True
 
-        self.reveal = False  # if True, show actual text instead of masking
+        # horizontal scroll (pixels)
+        self.scroll_x = 0
 
-        # Toggle button rectangle for password reveal (initialized later since it depends on rect size)
+        # backspace hold repeat
+        self._backspace_held = False
+        self._backspace_initial_delay = 0.35
+        self._backspace_repeat_rate = 0.045
+        self._backspace_timer = 0.0
+        self._backspace_repeat_timer = 0.0
+
+        # reveal toggle for masked inputs
+        self.reveal = False
         self.toggle_rect = pygame.Rect(0, 0, 0, 0)
 
-    # Handles events for the text input, including typing and password reveal toggle
+    # Deletes the character to the left of the cursor   
+    def _delete_left(self):
+        if self.cursor_pos > 0 and self.text:
+            self.text = self.text[: self.cursor_pos - 1] + self.text[self.cursor_pos :]
+            self.cursor_pos -= 1
+
+    # Inserts text at the cursor position
+    def _insert_text(self, s: str):
+        if not s:
+            return
+        self.text = self.text[: self.cursor_pos] + s + self.text[self.cursor_pos :]
+        self.cursor_pos += len(s)
+
+    # Clamps the cursor position to be within the bounds of the text
+    def _clamp_cursor(self):
+        self.cursor_pos = max(0, min(self.cursor_pos, len(self.text)))
+
+    # Ensures the cursor is visible by adjusting scroll_x based on the cursor position and text width
+    def _ensure_cursor_visible(self, display_text: str, text_area_w: int):
+        # Calculate the pixel width of the text up to the cursor position
+        prefix = display_text[: self.cursor_pos]
+        prefix_w = self.font.size(prefix)[0]
+
+        # Adjust scroll_x to ensure the cursor is visible within the text area
+        if prefix_w - self.scroll_x < 0:
+            self.scroll_x = prefix_w
+        elif prefix_w - self.scroll_x > text_area_w:
+            self.scroll_x = prefix_w - text_area_w
+
+        # clamp scroll_x to not scroll beyond the text width
+        full_w = self.font.size(display_text)[0]
+        self.scroll_x = max(0, min(self.scroll_x, max(0, full_w - text_area_w)))
+
+    # Converts a mouse x-coordinate to a cursor position index in the text, accounting for scrolling
+    def _pos_from_mouse_x(self, mouse_x: int, display_text: str, text_start_x: int):
+        rel_x = (mouse_x - text_start_x) + self.scroll_x
+        rel_x = max(0, rel_x)
+
+        # Binary search to find the character index corresponding to the mouse x position
+        lo, hi = 0, len(display_text)
+        while lo < hi:
+            mid = (lo + hi) // 2
+            w = self.font.size(display_text[:mid])[0]
+            if w < rel_x:
+                lo = mid + 1
+            else:
+                hi = mid
+        return lo
+
+    # Handles events for the text input, including mouse clicks, keyboard input, and backspace hold repeat
     def handle_event(self, event):
         if self.mask:
             self.toggle_rect = pygame.Rect(self.rect.right - 46, self.rect.y + 6, 40, self.rect.height - 12)
 
-        # Handle mouse clicks for activating the input and toggling password reveal
+        # Mouse
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            # toggle reveal
             if self.mask and self.toggle_rect.collidepoint(event.pos):
                 self.reveal = not self.reveal
                 return None
 
+            # click inside input box
+            was_active = self.active
             self.active = self.rect.collidepoint(event.pos)
 
-        # Handle keyboard input when active, including paste (Ctrl+V / Cmd+V), backspace, and enter
+            if self.active:
+                # move cursor to click position
+                display = self.text
+                if self.mask and self.text and not self.reveal:
+                    display = "*" * len(self.text)
+
+                text_start_x = self.rect.x + 12
+                text_area_w = self.rect.width - 24 - (46 if self.mask else 0)
+                self.cursor_pos = self._pos_from_mouse_x(event.pos[0], display, text_start_x)
+                self._clamp_cursor()
+                self._ensure_cursor_visible(display, text_area_w)
+
+                # reset blinking for better UX
+                self.cursor_timer = 0.0
+                self.show_cursor = True
+
+            # if we clicked outside and were previously active, stop backspace repeat
+            if not self.active and was_active:
+                self._backspace_held = False
+
+        # Backspace key up stops repeating
+        if event.type == pygame.KEYUP and event.key == pygame.K_BACKSPACE:
+            self._backspace_held = False
+
+        # Keyboard input
         if event.type == pygame.KEYDOWN and self.active:
+            # Paste (Ctrl+V / Cmd+V)
             if (event.key == pygame.K_v) and (event.mod & pygame.KMOD_CTRL or event.mod & pygame.KMOD_META):
                 try:
                     clip = pygame.scrap.get(pygame.SCRAP_TEXT)
                     if clip:
                         pasted = clip.decode("utf-8", errors="ignore")
-                        pasted = pasted.replace("\x00", "")
-                        pasted = pasted.replace("\r", "")
-                        pasted = pasted.replace("\n", "")
-                        pasted = pasted.strip()
-
-                        self.text += pasted
+                        pasted = pasted.replace("\x00", "").replace("\r", "").replace("\n", "").strip()
+                        self._insert_text(pasted)
                 except Exception:
                     pass
 
             elif event.key == pygame.K_BACKSPACE:
-                self.text = self.text[:-1]
+                # delete once immediately, then repeat in update()
+                self._delete_left()
+                self._backspace_held = True
+                self._backspace_timer = 0.0
+                self._backspace_repeat_timer = 0.0
 
             elif event.key == pygame.K_RETURN:
                 return "enter"
 
+            elif event.key == pygame.K_LEFT:
+                self.cursor_pos -= 1
+                self._clamp_cursor()
+
+            elif event.key == pygame.K_RIGHT:
+                self.cursor_pos += 1
+                self._clamp_cursor()
+
+            elif event.key == pygame.K_HOME:
+                self.cursor_pos = 0
+
+            elif event.key == pygame.K_END:
+                self.cursor_pos = len(self.text)
+
             else:
                 if event.unicode and len(event.unicode) == 1:
-                    self.text += event.unicode
+                    # avoid null chars etc.
+                    ch = event.unicode.replace("\x00", "")
+                    if ch:
+                        self._insert_text(ch)
 
         return None
 
-    # Updates the cursor blinking state
+    # Updates the text input state, including cursor blinking and backspace hold repeat
     def update(self, dt):
+        # cursor blink
         if self.active:
             self.cursor_timer += dt
             if self.cursor_timer >= 0.5:
@@ -640,36 +757,76 @@ class TextInput:
         else:
             self.show_cursor = False
 
-    # Draws the text input on the surface, including masking and reveal toggle if applicable
+        # backspace hold repeat
+        if self.active and self._backspace_held:
+            self._backspace_timer += dt
+            if self._backspace_timer >= self._backspace_initial_delay:
+                self._backspace_repeat_timer += dt
+                while self._backspace_repeat_timer >= self._backspace_repeat_rate:
+                    self._backspace_repeat_timer -= self._backspace_repeat_rate
+                    self._delete_left()
+                    if self.cursor_pos <= 0:
+                        self._backspace_held = False
+                        break
+    
+    # Draws the text input on the surface, including background, text (with masking if enabled), cursor, and reveal toggle button
     def draw(self, surface):
         bg = (35, 35, 40) if not self.active else (45, 45, 55)
         pygame.draw.rect(surface, bg, self.rect, border_radius=10)
         pygame.draw.rect(surface, (180, 180, 180), self.rect, 2, border_radius=10)
 
+        # choose display text
         display = self.text
         if self.mask and self.text and not self.reveal:
             display = "*" * len(self.text)
 
+        # area where text is allowed (exclude padding + reveal button)
+        pad_left = 12
+        pad_right = 12 + (46 if self.mask else 0)
+        text_area_w = self.rect.width - pad_left - pad_right
 
+        # placeholder / label rendering
         if not display and not self.active and self.placeholder:
-            label = self.font.render(self.placeholder, True, (140, 140, 140))
+            label_surf = self.font.render(self.placeholder, True, (140, 140, 140))
+            label_x = self.rect.x + pad_left
+            label_y = self.rect.y + (self.rect.height - label_surf.get_height()) // 2
+            surface.blit(label_surf, (label_x, label_y))
         else:
-            display = display.replace("\x00", "")
-            label = self.font.render(display, True, (240, 240, 240))
+            # make sure cursor is visible
+            self._clamp_cursor()
+            self._ensure_cursor_visible(display, text_area_w)
 
-        x = self.rect.x + 12
-        y = self.rect.y + (self.rect.height - label.get_height()) // 2
-        surface.blit(label, (x, y))
+            # clip area
+            clip_rect = pygame.Rect(self.rect.x + pad_left, self.rect.y, text_area_w, self.rect.height)
+            old_clip = surface.get_clip()
+            surface.set_clip(clip_rect)
 
-        if self.active and self.show_cursor:
-            cursor_x = x + label.get_width() + 2
-            pygame.draw.line(surface, (240, 240, 240), (cursor_x, self.rect.y + 10), (cursor_x, self.rect.bottom - 10), 2)
-        
-        # Button to toggle password reveal
+            label_surf = self.font.render(display, True, (240, 240, 240))
+            label_x = self.rect.x + pad_left - self.scroll_x
+            label_y = self.rect.y + (self.rect.height - label_surf.get_height()) // 2
+            surface.blit(label_surf, (label_x, label_y))
+
+            # cursor
+            if self.active and self.show_cursor:
+                prefix = display[: self.cursor_pos]
+                cursor_px = self.font.size(prefix)[0]
+                cursor_x = self.rect.x + pad_left + cursor_px - self.scroll_x
+                pygame.draw.line(
+                    surface,
+                    (240, 240, 240),
+                    (cursor_x, self.rect.y + 10),
+                    (cursor_x, self.rect.bottom - 10),
+                    2,
+                )
+
+            surface.set_clip(old_clip)
+
+        # reveal toggle button
         if self.mask:
+            self.toggle_rect = pygame.Rect(self.rect.right - 46, self.rect.y + 6, 40, self.rect.height - 12)
             pygame.draw.rect(surface, (60, 60, 70), self.toggle_rect, border_radius=10)
             pygame.draw.rect(surface, (160, 160, 160), self.toggle_rect, 2, border_radius=10)
 
-            label_text = "K" if not self.reveal else "NA"
-            lab = self.font.render(label_text, True, (240, 240, 240))
-            surface.blit(lab, lab.get_rect(center=self.toggle_rect.center))
+            icon = self.icon_eye if self.reveal else self.icon_eye_slash
+            icon_rect = icon.get_rect(center=self.toggle_rect.center)
+            surface.blit(icon, icon_rect)

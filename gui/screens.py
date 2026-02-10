@@ -410,6 +410,40 @@ class GameScreen(Screen):
             tooltip="Confirmer le vote\nÉlimine la cible sélectionnée"
         )
 
+        # Quit confirmation state
+        self.show_quit_confirm = False
+
+        # Quit confirmation modal setup
+        w, h = 420, 180
+        self.quit_modal_rect = pygame.Rect(
+            self.app.w // 2 - w // 2,
+            self.app.h // 2 - h // 2,
+            w, h
+        )
+
+        # Fonts and buttons for the quit confirmation modal
+        self.quit_title_font = pygame.font.SysFont(None, 34)
+
+        # Calculate button positions for the quit confirmation modal, with "Annuler" on the left and "Quitter" on the right, both aligned at the bottom of the modal with some padding. This allows users to confirm if they really want to quit the current game, preventing accidental exits.
+        btn_w, btn_h = 150, 44
+        y_btn = self.quit_modal_rect.bottom - 22 - btn_h
+
+        # Quit confirmation buttons: "Annuler" to go back to the game, and "Quitter" to return to the main menu. This allows users to confirm if they really want to quit the current game, preventing accidental exits.
+        self.quit_btn_cancel = Button(
+            rect=(self.quit_modal_rect.left + 30, y_btn, btn_w, btn_h),
+            text="Annuler",
+            font=self.font,
+            tooltip="Revenir au jeu"
+        )
+
+        # Quit confirmation button to return to the main menu, allowing users to confirm if they really want to quit the current game and lose their progress, preventing accidental exits.
+        self.quit_btn_confirm = Button(
+            rect=(self.quit_modal_rect.right - 30 - btn_w, y_btn, btn_w, btn_h),
+            text="Quitter",
+            font=self.font,
+            tooltip="Retourner à l'accueil"
+        )
+
         # Currently selected vote index
         self.selected_vote_idx = None
 
@@ -763,9 +797,27 @@ class GameScreen(Screen):
 
     # Handles events for the game screen
     def handle_event(self, event):
+        # Quit confirmation modal
+        if self.show_quit_confirm:
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                self.show_quit_confirm = False
+                return
+
+            if self.quit_btn_cancel.handle_event(event):
+                self.show_quit_confirm = False
+                return
+
+            if self.quit_btn_confirm.handle_event(event):
+                from gui.screens import SetupScreen
+                self.app.set_screen(SetupScreen(self.app))
+                return
+
+            # block all other events while the quit confirmation modal is shown
+            return
+
         # Escape to return to setup screen
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-            self.app.set_screen(SetupScreen(self.app))
+            self.show_quit_confirm = True
             return
         
         if event.type == pygame.KEYDOWN and event.key == pygame.K_TAB:
@@ -885,15 +937,39 @@ class GameScreen(Screen):
         mx, my = pygame.mouse.get_pos()
         hover_text = ""
 
-        # priorité : boutons
+        # Tooltip for continue/confirm button based on the current phase and whether the button is enabled, providing contextual information to the player about what the button does and whether they can click it. This helps guide the player through the game flow and informs them of any conditions that need to be met before they can proceed.
         hover_text = hover_text or (self.confirm_btn.get_hover_text((mx, my)) if self.engine.phase == "JourVote" else "")
         hover_text = hover_text or (self.continue_btn.get_hover_text((mx, my)) if self.engine.phase != "JourVote" else "")
 
-        # puis liste joueurs
+        # Player list items (name, note, vote buttons)
         hover_text = hover_text or self.player_list.get_hover_text((mx, my))
 
-        # affiche
+        # Show tooltip if hovering over something with hover text (buttons, player list items, etc.)
         self.tooltip.draw(surface, hover_text, (mx, my))
+
+        # Quit confirmation modal
+        if self.show_quit_confirm:
+            # Overlay semi-transparent to dim the background and focus attention on the quit confirmation modal, which asks the player to confirm if they really want to quit the current game and return to the main menu, preventing accidental exits. The modal includes "Annuler" and "Quitter" buttons for the player's choice.
+            overlay = pygame.Surface((self.app.w, self.app.h), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 140))
+            surface.blit(overlay, (0, 0))
+
+            # Draw the quit confirmation modal with a title, message, and buttons for confirming or canceling the quit action. This modal appears when the player presses ESC, asking them to confirm if they really want to quit the current game and return to the main menu, which helps prevent accidental exits.
+            pygame.draw.rect(surface, (30, 30, 34), self.quit_modal_rect, border_radius=16)
+            pygame.draw.rect(surface, (200, 200, 200), self.quit_modal_rect, 2, border_radius=16)
+
+            cx = self.quit_modal_rect.centerx
+
+            # Title and message for the quit confirmation modal, asking the player if they want to quit the current game and return to the main menu, which helps prevent accidental exits. The title is more prominent, while the message provides additional context.
+            title = self.quit_title_font.render("Quitter la partie ?", True, (240, 240, 240))
+            surface.blit(title, title.get_rect(center=(cx, self.quit_modal_rect.y + 45)))
+
+            # Message for the quit confirmation modal, asking the player if they want to quit the current game and return to the main menu, which helps prevent accidental exits. This message provides additional context below the title.
+            msg = self.font.render("Retourner à l'accueil", True, (200, 200, 200))
+            surface.blit(msg, msg.get_rect(center=(cx, self.quit_modal_rect.y + 85)))
+
+            self.quit_btn_cancel.draw(surface)
+            self.quit_btn_confirm.draw(surface)
 
 
 # Base class for end screens (victory/defeat)
