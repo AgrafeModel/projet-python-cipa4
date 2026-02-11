@@ -33,4 +33,4 @@ dist/
 *.log
 
 # Constants
-game/constants.py
+# game/constants.py
