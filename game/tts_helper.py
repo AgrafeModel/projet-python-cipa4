@@ -1,6 +1,7 @@
 # game/tts_helper.py
 from __future__ import annotations
 
+import re
 import tempfile
 import pygame
 import threading
@@ -30,6 +31,7 @@ audio_config.voice_channel.set_volume(audio_config.voice_volume)
 
 # Global state for TTS management
 _ENABLED = True
+_LAST_TTS_ERROR: Optional[str] = None
 _client: Optional["ElevenLabsClient"] = None
 
 audio_generation_queue = Queue()
@@ -72,18 +74,66 @@ def set_api_key(new_key: str):
     global _client
     _client = None
 
+# Last error
+def pop_last_error() -> Optional[str]:
+    global _LAST_TTS_ERROR
+    err = _LAST_TTS_ERROR
+    _LAST_TTS_ERROR = None
+    return err
+
+def _is_tts_key_or_quota_error(msg: str) -> bool:
+    m = msg.lower()
+    # Search an error
+    return (
+        "unauthorized" in m
+        or "forbidden" in m
+        or "invalid_api_key" in m
+        or "api key" in m and "invalid" in m
+        or "quota" in m
+        or "insufficient" in m
+        or "payment" in m
+        or "402" in m
+        or "401" in m
+        or "403" in m
+        or "too many requests" in m
+        or "429" in m
+        or "reported as leaked" in m
+    )
+
 # Validates the provided API key by attempting to create a client and fetch voices
-def validate_api_key(key: str) -> bool:
-    if ElevenLabs is None:
+def validate_api_key(api_key: str) -> bool:
+    api_key = (api_key or "").strip()
+    if len(api_key) < 10:
         return False
-    if not key or len(key) < 10:
-        return False
+
     try:
-        # Just try to create a client and fetch voices to validate the key
-        client = ElevenLabs(api_key=key)
-        _ = client.voices.get_all()
+        from elevenlabs.client import ElevenLabs
+
+        client = ElevenLabs(api_key=api_key)
+
+        # Get a voice
+        voices = client.voices.get_all()
+        if not voices or not getattr(voices, "voices", None) or len(voices.voices) == 0:
+            return False
+
+        voice_id = voices.voices[0].voice_id
+
+        # Speaker
+        text = "Bienvenue dans le monde du Loup Garou"
+        audio = client.text_to_speech.convert(
+            voice_id=voice_id,
+            text=text,
+            model_id="eleven_multilingual_v2",
+        )
+
+        for _ in audio:
+            break
+
         return True
-    except Exception:
+
+    except Exception as e:
+        # quota/leak/key : invalid
+        msg = str(e)
         return False
 
 
@@ -122,6 +172,13 @@ def _tts_worker():
         # Handle any exceptions during TTS generation gracefully
         except Exception as e:
             print("TTS generation error:", e)
+
+            global _LAST_TTS_ERROR
+            msg = str(e)
+
+            if _is_tts_key_or_quota_error(msg):
+                _LAST_TTS_ERROR = "Clé API du TTS n'est plus valide, nombre de tokens insuffisant."
+                set_enabled(False)
 
         audio_generation_queue.task_done()
 

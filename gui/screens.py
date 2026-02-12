@@ -7,13 +7,13 @@
 import pygame
 import threading
 import queue
-import time
 
 
 from gui.widgets import Button, Stepper, ChatBox, PlayerListPanel, Tooltip, TextInput
 from game.engine_with_ai import GameEngine as GeminiEngine
 from game.engine_openrouter import GameEngine as OpenRouterEngine
 from game.engine import GameEngine as OllamaOrTemplateEngine
+from game.engine_default import GameEngine as DefaultEngine
 import game.constants
 import google.generativeai as genai
 from gui.settings_screen import SettingsScreen
@@ -148,20 +148,12 @@ class ModeSelectScreen(Screen):
 
         # Handle mode selection buttons, checking API keys or availability before proceeding to TTS setup or error screens
         if self.btn_openrouter.handle_event(event):
-            # check OpenRouter key
-            if not game.constants.OPENROUTER_API_KEY or "TON_API_KEY" in game.constants.OPENROUTER_API_KEY:
-                self.app.set_screen(ApiKeyScreen(self.app, mode="openrouter", num_players=self.num_players, previous_screen=self))
-                return
-            # go to TTS check
-            self.app.set_screen(TTSKeyScreen(self.app, engine_cls=OpenRouterEngine, num_players=self.num_players, previous_screen=self))
+            self.app.set_screen(ApiKeyScreen(self.app, mode="openrouter", num_players=self.num_players, previous_screen=self))
             return
 
         # Gemini requires API key but no real test possible before TTS setup, so we just check if the key is set and if not, go to API key screen. If key is set, we go directly to TTS setup (no real way to validate the key beforehand since Gemini doesn't have a simple ping API, but we'll validate it properly in the TTSKeyScreen when trying to use it).
         if self.btn_gemini.handle_event(event):
-            if not game.constants.API_GEMINI or "TON_API_KEY" in game.constants.API_GEMINI:
-                self.app.set_screen(ApiKeyScreen(self.app, mode="gemini", num_players=self.num_players, previous_screen=self))
-                return
-            self.app.set_screen(TTSKeyScreen(self.app, engine_cls=GeminiEngine, num_players=self.num_players, previous_screen=self))
+            self.app.set_screen(ApiKeyScreen(self.app, mode="gemini", num_players=self.num_players, previous_screen=self))
             return
 
         # Ollama : no API key, but check if Ollama is available before proceeding to TTS setup (since if Ollama isn't available, the game won't work at all)
@@ -215,6 +207,24 @@ class ApiKeyScreen(Screen):
         self.play_btn = Button((cx - 120, 360, 240, 52), "Valider & Continuer", self.font)
         self.input = TextInput((cx - 260, 260, 520, 56), self.font, placeholder=f"Entrer {label}…", mask=True)
 
+        # Prefill if key already exists
+        if self.mode == "openrouter":
+            key = getattr(game.constants, "OPENROUTER_API_KEY", "")
+        else:
+            key = getattr(game.constants, "API_GEMINI", "")
+
+        if key:
+            self.input.text = key
+
+        # Access to fallback button (engine_default.py)
+        self.fallback_btn = Button(
+            (cx - 120, 500, 240, 52),
+            "Mode par défaut",
+            self.font
+        )
+        self.show_fallback = False
+
+
         self.msg = ""
 
     # Updates the API key input field (handles cursor blinking)
@@ -222,40 +232,61 @@ class ApiKeyScreen(Screen):
         self.input.update(dt)
 
     # Validates the provided API key by attempting to create a client and perform a simple API call (listing models) to ensure the key works before proceeding to the TTS setup screen. Shows an error message if validation fails.
-    def _validate(self, key: str) -> bool:
+    def _validate(self, key: str) -> tuple[bool, str]:
         key = key.strip()
         if len(key) < 10:
-            return False
+            return False, "Clé invalide. Réessaie."
 
-        # Gemini : no simple ping API available, so we just try to create a client and list models to validate the key (if it works, we should get a non-empty list of models)
         if self.mode == "gemini":
             try:
+                import google.generativeai as genai
                 genai.configure(api_key=key)
-                models = list(genai.list_models())
-                return len(models) > 0
+                model = genai.GenerativeModel("gemini-2.5-flash-lite")
+                r = model.generate_content("Réponds uniquement avec 'ok'.")
+                text = (getattr(r, "text", "") or "").strip().lower()
+                if "ok" in text:
+                    return True, ""
+                return False, "Clé invalide. Réessaie."
             except Exception:
-                return False
+                # leaked 403 / quota 429 / etc => not valid
+                return False, "Clé invalide. Réessaie."
 
-        # openrouter: vrai test API (liste des modèles)
+        # openrouter
         try:
             from ai.client import OpenRouterClient, OpenRouterClientConfig
             c = OpenRouterClient(OpenRouterClientConfig(api_key=key))
-            _ = c.client.models.list()  # ✅ ping réel
-            return True
+            resp = c.client.chat.completions.create(
+                model=c.model,
+                messages=[{"role": "user", "content": "Réponds uniquement avec 'ok'."}],
+                max_tokens=3,
+                temperature=0,
+            )
+            out = (resp.choices[0].message.content or "").strip().lower()
+            if "ok" in out:
+                return True, ""
+            return False, "Clé invalide. Réessaie."
         except Exception:
-            return False
+            # 429 / 404 privacy / etc => not valid
+            return False, "Clé invalide. Réessaie."
+
 
     # Handles events for the API key screen, including validating the key and navigating to the TTS setup screen if valid, or showing an error message if invalid. Also handles going back to the previous screen.
     def handle_event(self, event):
         if self.back_btn.handle_event(event):
             self.app.set_screen(self.previous_screen)
             return
+        
+        if self.show_fallback and self.fallback_btn.handle_event(event):
+            self.app.set_screen(TTSKeyScreen(self.app, engine_cls=DefaultEngine, num_players=self.num_players, previous_screen=self.previous_screen))
+            return
 
         # Handle API key validation and navigation to TTS setup screen based on the selected mode (OpenRouter or Gemini). Shows an error message if the key is invalid.
         r = self.input.handle_event(event)
         if r == "enter" or self.play_btn.handle_event(event):
             key = self.input.text.strip()
-            if self._validate(key):
+            ok, err = self._validate(key)
+            if ok:
+                self.show_fallback = False
                 if self.mode == "openrouter":
                     game.constants.OPENROUTER_API_KEY = key
                     self.app.set_screen(TTSKeyScreen(self.app, engine_cls=OpenRouterEngine, num_players=self.num_players, previous_screen=self.previous_screen))
@@ -263,8 +294,10 @@ class ApiKeyScreen(Screen):
                     game.constants.API_GEMINI = key
                     self.app.set_screen(TTSKeyScreen(self.app, engine_cls=GeminiEngine, num_players=self.num_players, previous_screen=self.previous_screen))
             else:
-                self.msg = "Clé invalide. Réessaie."
+                self.msg = err or "Clé invalide. Réessaie."
+                self.show_fallback = True
             return
+
 
     # Draws the API key input screen, including the title, input field, buttons, and any error messages
     def draw(self, surface):
@@ -280,6 +313,15 @@ class ApiKeyScreen(Screen):
         self.back_btn.draw(surface)
         self.input.draw(surface)
         self.play_btn.draw(surface)
+
+        if self.show_fallback:
+            # Button
+            self.fallback_btn.draw(surface)
+
+            # Text
+            hint = self.font.render("Lance le mode algorithmique (sans API)", True, (170, 170, 170))
+            hint_rect = hint.get_rect(centerx=self.fallback_btn.rect.centerx, top=self.fallback_btn.rect.bottom + 8)
+            surface.blit(hint, hint_rect)
 
         if self.msg:
             msg = self.font.render(self.msg, True, (255, 120, 120))
@@ -467,10 +509,6 @@ class GameScreen(Screen):
         self.pending_events = [] # events to display
         self.msg_delay = 0.55 # seconds between messages
         self._msg_timer = 0.0  # timer for message display
-
-        # Background generation state for API-based engines (like Ollama) to avoid blocking the UI while waiting for responses, especially during the initial start_day call which can take a long time. We use a queue to get results from the background thread when it finishes.
-        self._bg_queue = queue.Queue()
-        self._bg_loading = False
         
         # Generator for streaming message generation (one at a time from Ollama)
         self._message_generator = None
@@ -524,6 +562,46 @@ class GameScreen(Screen):
         self.bg_day = pygame.transform.scale(self.bg_day, (self.app.w, self.app.h))
         self.bg_night = pygame.transform.scale(self.bg_night, (self.app.w, self.app.h))
 
+        # API failure cinematic (glitch)
+        self._api_fail_active = False
+        self._api_fail_t = 0.0
+        self._api_fail_duration = 2.5   # time during which the glitch effect is active
+        self.extra_pause = 1.5          # pause after revealing the wolves before showing the error message, to let the player see the wolves for a moment before the message appears
+        self.total_duration = self._api_fail_duration + self.extra_pause
+        self._api_fail_hold = 0.6       # time to see wolves without text after glitch before showing error message
+        self._api_fail_reason = ""
+        self._api_fail_wolves: list[str] = []
+
+    # Helper method to get the names of the players with a "loup" role, used for the API failure cinematic to show which players are wolves when an API error occurs. This allows us to add a thematic touch to the error handling by showing the wolves in the game when there's an issue with the API, enhancing immersion even in error scenarios.
+    def _get_wolves_names(self) -> list[str]:
+        wolves = []
+        for p in getattr(self.engine, "players", []):
+            role = getattr(p, "role", "")
+            if isinstance(role, str) and role.lower().startswith("loup"):
+                wolves.append(p.name)
+        return wolves
+    
+    # Triggers the API failure cinematic, which includes a glitch effect and then shows the names of the wolves before displaying an error message. This is used to handle cases where the engine encounters an API error, providing a more immersive and thematic way to inform the player of the issue while also showing the wolves in the game.
+    def _trigger_api_failure(self, reason: str):
+        if self._api_fail_active:
+            return
+
+        self._api_fail_active = True
+        self._api_fail_t = 0.0
+        self._api_fail_reason = reason or "Erreur API"
+
+        self._api_fail_wolves = self._get_wolves_names()
+
+        # Glitch effect: we can add some random noise or distortion to the background or player images to create a glitchy visual effect, enhancing the cinematic feel of the API failure. This can be done in the draw() method when _api_fail_active is True, by applying some random transformations to the visuals.
+        self.pending_events.clear()
+        self._message_generator = None
+        self._bg_loading = False
+        self._auto_advance_armed = False
+
+        # After the glitch effect and showing the wolves, we will display an error message in the chat with the reason for the API failure. This allows us to inform the player of what went wrong in a thematic way, while also providing some visual interest during the error scenario.
+        self._update_controls()
+
+
     # Helper method to get the appropriate background image based on the current phase of the game (day or night). This allows us to visually differentiate between day and night phases in the game by showing different backgrounds.
     def _get_background(self):
         if self.engine.phase == "Nuit":
@@ -567,7 +645,28 @@ class GameScreen(Screen):
 
     # Updates the game screen
     def update(self, dt: float):
-        # Check if we are waiting for background generation to finish (for API-based engines) and if so, check the queue for results to display when ready. This allows us to keep the UI responsive and show loading messages while waiting for the engine to generate responses, especially during longer operations like start_day or advance for API-based engines.
+        # API failure handling: if an API failure has been triggered, we want to run the glitch effect for a certain duration, then show the wolves without text for a short time, and finally transition to the API failure end screen with the reason for the failure and the list of wolves. This allows us to handle API failures in a thematic way while also providing some visual interest during the error scenario.
+        if self._api_fail_active:
+            self._api_fail_t += dt
+            if self._api_fail_t >= self.total_duration:
+                wolves = self._api_fail_wolves
+                found = []  
+                self.app.set_screen(ApiFailureEndScreen(self.app, self.num_players, wolves, found))
+            return
+
+        # TTS error handling: if there's an error with TTS (like an invalid API key or a failure to generate speech), we want to show a message in the chat to inform the player, and then update the controls to reflect that TTS is no longer available. This allows us to handle TTS errors gracefully by informing the player and disabling TTS features without crashing the game.
+        tts_err = tts_helper.pop_last_error()
+        if tts_err:
+            self.chat.add_message(
+                "Système",
+                tts_err,
+                True,
+                is_system=False,
+                is_TTS=True
+            )
+            self._update_controls()
+
+        # Background generation handling (API engines) 
         if self._bg_loading:
             try:
                 kind, payload = self._bg_queue.get_nowait()
@@ -578,29 +677,12 @@ class GameScreen(Screen):
                     self._refresh_ui_players_from_engine()
                     self._update_vote_buttons_visibility()
                     self._update_controls()
-                else:
-                    self.chat.add_message("Système", f"Erreur Ollama: {payload}", True, is_system=True)
 
-                self._update_controls()
-            except queue.Empty:
-                pass
-
-        if self._bg_loading:
-            try:
-                # Check if the background thread has finished and put something in the queue
-                kind, payload = self._bg_queue.get_nowait()
-                # When background generation finishes, we get the resulting events from the queue and display them, then transition to the discussion phase. If there was an error during generation, we display an error message in the chat.
-                if kind == "events":
-                    self._bg_loading = False
-                    self._update_controls()
-                    self._enqueue_events(payload)
-                    self._refresh_ui_players_from_engine()
-                    self._update_vote_buttons_visibility()
-                    self._update_controls()
                 elif kind == "error":
-                    self._bg_loading = False
-                    self._update_controls()
-                    self.chat.add_message("Système", f"Erreur génération API: {payload}", True, is_system=True)
+                    # glitch stop
+                    self._trigger_api_failure(str(payload))
+                    return
+
             except queue.Empty:
                 pass
 
@@ -633,7 +715,7 @@ class GameScreen(Screen):
                 try:
                     events = self.engine.start_vote()
                 except Exception as e:
-                    self.chat.add_message("Système", f"⚠ Erreur moteur (vote): {e}", True, is_system=True)
+                    self._trigger_api_failure(str(e))
                     return
 
                 # Enqueue resulting events and update UI for vote phase
@@ -648,7 +730,7 @@ class GameScreen(Screen):
                     try:
                         events = self.engine.advance()
                     except Exception as e:
-                        self.chat.add_message("Système", f"⚠ Erreur moteur (nuit): {e}", True, is_system=True)
+                        self._trigger_api_failure(str(e))
                         return
 
                     self._enqueue_events(events)
@@ -736,12 +818,10 @@ class GameScreen(Screen):
 
         return False
 
-
     # Handles vote selection from the player list
     def _on_vote_selected(self, idx: int):
         self.selected_vote_idx = idx
         self._update_controls()
-
 
     # Updates control states based on game phase
     def _update_controls(self):
@@ -822,6 +902,11 @@ class GameScreen(Screen):
 
     # Handles events for the game screen
     def handle_event(self, event):
+        if self._api_fail_active:
+            # no interaction allowed during API failure cinematic
+            return
+
+
         # Quit confirmation modal
         if self.show_quit_confirm:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
@@ -946,6 +1031,84 @@ class GameScreen(Screen):
 
         surface.blit(panel, rect.topleft)
 
+    # Draws the API failure cinematic with a glitch effect, showing a progressive dark overlay, scanlines, glitchy text, and a reveal of the wolves' names before displaying the error message. This is used to create an immersive and thematic experience when an API error occurs, enhancing the storytelling even in error scenarios.
+    def _draw_api_fail_glitch(self, surface):
+        import random
+
+        w, h = self.app.w, self.app.h
+        t = self._api_fail_t
+
+        # Progressive dark overlay
+        alpha = min(180, int(60 + (t / self._api_fail_duration) * 160))
+        overlay = pygame.Surface((w, h), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, alpha))
+        surface.blit(overlay, (0, 0))
+
+        # Scan
+        lines = pygame.Surface((w, h), pygame.SRCALPHA)
+        step = 6
+        for y in range(0, h, step):
+            a = 20 if (y // step) % 2 == 0 else 10
+            pygame.draw.line(lines, (255, 255, 255, a), (0, y), (w, y))
+        surface.blit(lines, (0, 0))
+
+        # Glitch text
+        big = pygame.font.SysFont(None, 62)
+        mid = pygame.font.SysFont(None, 34)
+
+        title = "CONNEXION PERDUE"
+        sub = "Signal corrompu…"
+
+        # Jitter
+        jx = random.randint(-3, 3)
+        jy = random.randint(-3, 3)
+
+        # Primary text surfaces
+        title_s = big.render(title, True, (240, 240, 240))
+        sub_s = mid.render(sub, True, (200, 200, 200))
+
+        cx = w // 2
+        y0 = h // 2 - 140
+
+        # glitch: draw the title multiple times with different offsets and colors to create a glitchy effect, enhancing the cinematic feel of the API failure. We draw the title in white, then in red with a slight offset, and then again in white on top to create a layered glitch effect.
+        title_s2 = big.render(title, True, (255, 80, 80))
+        surface.blit(title_s2, title_s2.get_rect(center=(cx + jx + 2, y0 + jy)))
+        surface.blit(title_s, title_s.get_rect(center=(cx + jx, y0 + jy)))
+
+        surface.blit(sub_s, sub_s.get_rect(center=(cx, y0 + 55)))
+
+        # Wolves reveal after a short hold time, showing the names of the wolves in the game with a "masque" vertical reveal effect (like slices being revealed one by one), along with a small glitch effect of random rectangles to enhance the cinematic feel. This adds a thematic touch to the API failure by showing the wolves in the game, and creates visual interest during the error scenario.
+        if t >= self._api_fail_hold:
+            reveal = min(1.0, (t - self._api_fail_hold) / (self._api_fail_duration - self._api_fail_hold))
+            wolves = self._api_fail_wolves or ["(inconnu)"]
+
+            wolves_title = mid.render("LES LOUPS ÉTAIENT :", True, (255, 120, 120))
+            surface.blit(wolves_title, wolves_title.get_rect(center=(cx, y0 + 120)))
+
+            # Render the wolves' names as a single string with a separator, and create a surface for it. Then we will apply a "masque" effect by only showing a portion of the surface based on the reveal progress, creating a vertical reveal effect as if slices of the text are being revealed one by one. This allows us to show the wolves' names in a visually interesting way during the API failure cinematic.
+            names_font = pygame.font.SysFont(None, 56)
+            names = "  •  ".join(wolves)
+            names_s = names_font.render(names, True, (255, 60, 60))
+
+            # mask
+            mw = int(names_s.get_width() * reveal)
+            mh = names_s.get_height()
+            mask_rect = pygame.Rect(0, 0, mw, mh)
+
+            tmp = pygame.Surface((names_s.get_width(), mh), pygame.SRCALPHA)
+            tmp.blit(names_s, (0, 0))
+            tmp2 = tmp.subsurface(mask_rect)
+
+            rect = names_s.get_rect(center=(cx, y0 + 185))
+            surface.blit(tmp2, rect.topleft)
+
+            for _ in range(10):
+                rx = random.randint(0, w - 60)
+                ry = random.randint(0, h - 10)
+                rw = random.randint(20, 120)
+                rh = random.randint(6, 18)
+                pygame.draw.rect(surface, (255, 255, 255, 35), (rx, ry, rw, rh))
+
     # Updates the game screen
     def draw(self, surface):
         surface.blit(self._get_background(), (0, 0))
@@ -1016,6 +1179,11 @@ class GameScreen(Screen):
 
             self.quit_btn_cancel.draw(surface)
             self.quit_btn_confirm.draw(surface)
+        
+        # API failure cinematic (glitch + wolves reveal + error message)
+        if self._api_fail_active:
+            self._draw_api_fail_glitch(surface)
+
 
 
 # Base class for end screens (victory/defeat)
@@ -1174,6 +1342,39 @@ class DefeatScreen(EndScreen):
             found_wolves = found_wolves,
             engine_cls=engine_cls
         )
+
+
+# Special end screen for API failure, showing a specific message about the API connection being interrupted and the wolves winning by default, along with an explanation about why this might happen (e.g. API key issues) and advice for the player on how to resolve it (like adding a new API key or using the default mode without API). This screen inherits from the base EndScreen class but overrides the subtitle and adds extra explanatory text below the wolves panel to inform the player about the situation and how to fix it.
+class ApiFailureEndScreen(EndScreen):
+    def __init__(self, app, num_players: int, wolves: list[str], found_wolves: list[str], engine_cls=None):
+        super().__init__(
+            app,
+            title="FIN DE PARTIE",
+            subtitle="Connexion API interrompue : les Loups gagnent.",
+            num_players=num_players,
+            wolves=wolves,
+            found_wolves=found_wolves,
+            engine_cls=engine_cls
+        )
+
+        # Extra lines of explanation to show below the wolves panel, informing the player about the API connection issue and providing advice on how to resolve it. This is important to help the player understand why the game ended abruptly and what they can do to fix it for future games, especially if they are using a free API key that might have hit its quota limit or been revoked.
+        self.extra_lines = [
+            "La clé API n'est plus disponible (quota dépassé, clé révoquée, ou erreur réseau).",
+            "C'est fréquent avec les clés gratuites : il existe un quota limité.",
+            "",
+            "Conseil : ajoute une nouvelle clé API ou utilise le mode par défaut (sans API).",
+        ]
+
+    def draw(self, surface):
+        super().draw(surface)
+
+        # Text explanatory below the wolves panel
+        y = self.app.h // 2 + 170
+        for line in self.extra_lines:
+            txt = self.font.render(line, True, (200, 200, 200))
+            rect = txt.get_rect(centerx=self.app.w // 2, y=y)
+            surface.blit(txt, rect)
+            y += 26
 
 
 # Ollama error screen

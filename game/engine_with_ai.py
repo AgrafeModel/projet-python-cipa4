@@ -15,6 +15,10 @@ import google.generativeai as genai
 from game.tts_helper import speak_text
 import audio_config
 
+# Custom exception for API unavailability
+class ApiUnavailableError(RuntimeError):
+    pass
+
 # Represents a single chat message event displayed to the user
 @dataclass
 class ChatEvent:
@@ -114,9 +118,7 @@ GÉNÈRE LA DISCUSSION (format exact "Nom: texte") :
             return response.text.strip()
             
         except Exception as e:
-            print(f"⚠ Erreur Gemini: {e}")
-            # Fallback
-            return "La discussion IA ne peut pas être générée pour l'instant."
+            raise ApiUnavailableError(f"OpenRouter: {e}") from e
 
 
 # Core game engine managing:
@@ -196,18 +198,23 @@ class GameEngine:
     def alive_indexes(self) -> List[int]:
         return [i for i, p in enumerate(self.players) if p.alive]
 
+    # Utility methods for querying alive wolves and villagers
     def alive_wolf_indexes(self) -> List[int]:
         return [i for i, p in enumerate(self.players) if p.alive and p.role == "loup"]
 
+    # Utility method to get alive villagers (non-wolves)
     def alive_villager_indexes(self) -> List[int]:
         return [i for i, p in enumerate(self.players) if p.alive and p.role != "loup"]
-
+    
+    # Utility method to get the names of all wolves (alive or not)
     def all_wolves_names(self) -> list[str]:
         return [p.name for p in self.players if p.role == "loup"]
 
+    # Utility method to get the names of found wolves (those that have been identified by the village)
     def found_wolves_list(self) -> list[str]:
         return sorted(self.found_wolves_names)
     
+    # Checks if the game has a winner and returns "village", "loups", or None if the game is still ongoing.
     def get_winner(self) -> Optional[str]:
         wolves = len(self.alive_wolf_indexes())
         villagers = len(self.alive_villager_indexes())
@@ -217,11 +224,13 @@ class GameEngine:
             return "loups"
         return None
 
+    # Eliminates a player by index, marking them as dead and resetting their note.
     def kill_player(self, index: int) -> None:
         p = self.players[index]
         p.alive = False
         p.note = 0
 
+    # Generates a discussion for the day using either the AI or a simple fallback method. The discussion is based on the current game state, including alive players, eliminated players, known wolves, and recent chat history. If AI generation fails, it falls back to a simple random discussion.
     def _generate_day_discussion(self) -> list[ChatEvent]:
         alive_players = [p for p in self.players if p.alive]
         eliminated = [p.name for p in self.players if not p.alive]
@@ -252,66 +261,37 @@ class GameEngine:
                     name = parts[0].strip()
                     text = parts[1].strip()
                     
-                    # Vérifier si le locuteur est bien vivant
+                    # Check if the speaker is an alive player
                     speaker_player = next((p for p in alive_players if p.name == name), None)
                     if not speaker_player:
                         continue
                     
-                    # Ajouter à l'historique et aux événements
+                    # Add the message to events and public history
                     events.append(ChatEvent(name_ia=name, text=text, show_name_ia=True))
                     self.public_chat_history.append((name, text))
-
-                    # --- AJOUT DU TTS ICI ---
-                    # On utilise le voice_id stocké dans l'objet Player
-                    speak_text(text, voice_id=speaker_player.voice_id)
                 
                 if not events:
                     events = self._generate_simple([p.name for p in alive_players], n_messages=8)
                     
             except Exception as e:
-                print(f"⚠ Erreur génération discussion: {e}")
-                events = self._generate_simple([p.name for p in alive_players], n_messages=8)
-        else:
-            events = self._generate_simple([p.name for p in alive_players], n_messages=8)
+                raise ApiUnavailableError(f"OpenRouter: {e}") from e
 
         return events
 
-    def _generate_simple(self, alive_names: List[str], n_messages: int) -> list[ChatEvent]:
-        """Génération simple sans IA (fallback)"""
-        templates = [
-            "Je trouve ça suspect.", 
-            "On devrait observer plus attentivement.",
-            "Je ne suis pas convaincu.", 
-            "Quelqu'un cache quelque chose.",
-            "Je reste prudent.", 
-            "Ça me paraît louche.",
-            "On manque d'infos.", 
-            "Je pense qu'on devrait voter.",
-            "Franchement, je ne sais pas trop.", 
-            "Perso, j'ai des doutes."
-        ]
-        events = []
-        for _ in range(n_messages):
-            speaker = self.rng.choice(alive_names)
-            msg = self.rng.choice(templates)
-            self.public_chat_history.append((speaker, msg))
-            events.append(ChatEvent(name_ia=speaker, text=msg, show_name_ia=True))
-        return events
-
+    # Start the day phase with discussion, returning a list of chat events to display to the user. This method sets the game phase to "JourDiscussion", generates the discussion using the AI or fallback method, and returns the resulting chat events.
     def start_day(self) -> List[ChatEvent]:
-        """Démarre un nouveau jour"""
         self.phase = "JourDiscussion"
         events = [ChatEvent("Système", f"Début du Jour {self.day_count}.", True)]
         events += self._generate_day_discussion()
         return events
 
+    # Starts the voting phase, returning a chat event with instructions for voting. This method sets the game phase to "JourVote" and returns a message instructing players to click the "Voter" button and confirm their vote.
     def start_vote(self) -> List[ChatEvent]:
-        """Démarre la phase de vote"""
         self.phase = "JourVote"
         return [ChatEvent("Système", "Vote : clique sur le bouton \"Voter\" puis confirme.", True)]
 
+    # Handles a vote to eliminate a player by index. This method checks if the current phase is "JourVote", validates the target index, eliminates the targeted player, updates the found wolves if necessary, and returns chat events describing the elimination and transitioning to night.
     def cast_vote(self, target_index: int) -> List[ChatEvent]:
-        """Élimine un joueur par vote"""
         if self.phase != "JourVote":
             return []
         if target_index < 0 or target_index >= len(self.players):
@@ -330,8 +310,8 @@ class GameEngine:
         events.append(ChatEvent("???", "La nuit tombe…", False))
         return events
 
+    # Resolves the night phase by randomly selecting a victim from the alive villagers, eliminating them, and then starting the next day. This method checks if the current phase is "Nuit", selects a victim from the alive villagers, eliminates them, increments the day count, and returns chat events describing the outcome of the night and starting the next day.
     def resolve_night_and_start_next_day(self) -> List[ChatEvent]:
-        """Résout la nuit et commence le jour suivant"""
         if self.phase != "Nuit":
             return []
 
@@ -355,8 +335,8 @@ class GameEngine:
         events += self.start_day()
         return events
 
+    # Advances the game by one step based on the current phase. If the phase is "JourDiscussion", it either starts the vote if it's the second day or transitions to night. If the phase is "Nuit", it resolves the night and starts the next day. This method returns a list of chat events describing the changes in game state and any messages to display to the user.
     def advance(self) -> List[ChatEvent]:
-        """Avance la phase du jeu"""
         if self.phase == "JourDiscussion":
             if self.day_count >= 2:
                 return self.start_vote()

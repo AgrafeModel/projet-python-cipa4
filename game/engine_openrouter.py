@@ -17,6 +17,9 @@ from game.agent import Agent
 from game.context_manager import GameContextManager
 import game.constants
 
+# Custom exception for API unavailability
+class ApiUnavailableError(RuntimeError):
+    pass
 
 # Data class for chat events
 @dataclass
@@ -213,11 +216,8 @@ class GameEngine:
                 self.context_manager.add_global_context(dialogue_context)
 
             except Exception as e:
-                # Fallback message if OpenRouter fails
-                fallback_msg = "..."
-                events.append(ChatEvent(name_ia=speaker_name, text=fallback_msg, show_name_ia=True))
-                print(f"[ERROR] Agent {speaker_name} failed to generate message: {e}")
-
+                raise ApiUnavailableError(f"OpenRouter: {e}") from e
+            
         return events
 
     # Starts the day phase with discussion
