@@ -566,7 +566,7 @@ class GameScreen(Screen):
         self._api_fail_active = False
         self._api_fail_t = 0.0
         self._api_fail_duration = 2.5   # time during which the glitch effect is active
-        self.extra_pause = 1.5          # pause after revealing the wolves before showing the error message, to let the player see the wolves for a moment before the message appears
+        self.extra_pause = 2.5          # pause after revealing the wolves before showing the error message, to let the player see the wolves for a moment before the message appears
         self.total_duration = self._api_fail_duration + self.extra_pause
         self._api_fail_hold = 0.6       # time to see wolves without text after glitch before showing error message
         self._api_fail_reason = ""
