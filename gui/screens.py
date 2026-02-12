@@ -650,7 +650,7 @@ class GameScreen(Screen):
             self._api_fail_t += dt
             if self._api_fail_t >= self.total_duration:
                 wolves = self._api_fail_wolves
-                found = []  
+                found = self.engine.found_wolves_list() 
                 self.app.set_screen(ApiFailureEndScreen(self.app, self.num_players, wolves, found))
             return
 
