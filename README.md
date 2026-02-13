@@ -33,6 +33,7 @@ pip install -r requirements.txt
 source .venv/bin/activate #pour lancer l'environnement
 ```
 
+
 # Guide Gemini API - Installation & Utilisation
 
 ## Obtention de la clé API Gemini (gratuite)
