@@ -337,3 +337,71 @@ Pour vérifier que tout fonctionne correctement :
 ## Utilisation dans le projet
 
 Une fois Ollama configuré avec Mistral, vous pourrez utiliser les fonctionnalités d'IA du projet. Le modèle sera accessible localement sans nécessiter de connexion internet pour les inférences.
+
+
+## Utilisation d'ElevenLabs TTS
+
+### Installation des dépendances
+
+```bash
+pip install elevenlabs
+```
+
+### Configuration de la clé API
+
+1. Créez un compte sur [ElevenLabs](https://elevenlabs.io)
+2. Récupérez votre clé API depuis les paramètres de votre compte
+3. Configurez la clé dans votre application ou en variable d'environnement :
+
+```python
+from elevenlabs import set_api_key
+
+set_api_key("votre_clé_api_ici")
+```
+
+### Exemple basique
+
+```python
+from elevenlabs import generate, play
+
+# Générer et jouer du texte
+audio = generate(
+    text="Bonjour, ceci est un test avec ElevenLabs",
+    voice="Bella",
+    model="eleven_monolingual_v1"
+)
+
+play(audio)
+```
+
+### Lister les voix disponibles
+
+```python
+from elevenlabs import voices
+
+for voice in voices():
+    print(f"{voice.name} (ID: {voice.voice_id})")
+```
+
+### Sauvegarder en fichier audio
+
+```python
+from elevenlabs import generate
+
+audio = generate(
+    text="Texte à convertir",
+    voice="Noah",
+    model="eleven_monolingual_v1"
+)
+
+# Sauvegarder en MP3
+with open("output.mp3", "wb") as f:
+    f.write(audio)
+```
+
+### Paramètres courants
+
+- **text** : Le texte à synthétiser
+- **voice** : Nom ou ID de la voix
+- **model** : `eleven_monolingual_v1` ou `eleven_multilingual_v2`
+- **api_key** : Votre clé API ElevenLabs
