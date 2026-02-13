@@ -33,6 +33,38 @@ pip install -r requirements.txt
 source .venv/bin/activate #pour lancer l'environnement
 ```
 
+# Interfaces
+
+Courtes descriptions des écrans disponibles :
+
+### Accueil
+Écran d’accueil du jeu et point d’entrée principal.
+![](assets/screen/acceuil.png)
+
+### Paramètres
+Réglages généraux (volume des musique et volume des voix).
+![](assets/screen/parametres.png)
+
+### Choix des modèles
+Sélection du moteur/du modèle d’IA : OpenRouteur - Gemini - Ollama.
+![](assets/screen/choix_modeles.png)
+
+### Clé API
+Saisie et validation de la clé d’API lors du lancement d'une partie. Clé API de génération (OpenRouter ou Gemini) ou alors du TTS (Génération de voix ElevenLabs).
+![](assets/screen/cle_api.png)
+
+### Vote
+Interface de la partie et notamment du moment de vote.
+![](assets/screen/vote.png)
+
+### API obsolète
+Message d’alerte quand une API n’est plus disponible (message en orange).
+![](assets/screen/api_obsoltete.png)
+
+### Fin de partie
+Écran de résultats et victoire/défaite.
+![](assets/screen/fin_victoires.png)
+
 
 # Guide Gemini API - Installation & Utilisation
 
