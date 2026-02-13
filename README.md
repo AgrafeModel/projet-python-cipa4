@@ -1,5 +1,7 @@
 # Projet Python - Groupe 10
 
+![LOUGARIA Logo](assets/lougaria-banner.png)
+
 **Editeurs**
 
 - Brieuc JOONNEKINDT : OnWix
@@ -337,3 +339,87 @@ Pour vérifier que tout fonctionne correctement :
 ## Utilisation dans le projet
 
 Une fois Ollama configuré avec Mistral, vous pourrez utiliser les fonctionnalités d'IA du projet. Le modèle sera accessible localement sans nécessiter de connexion internet pour les inférences.
+
+---
+
+## 🌐 OpenRouter
+
+### Qu'est-ce qu'OpenRouter ?
+
+**OpenRouter** est un service qui donne accès à de multiples modèles d'IA via une API unifiée. Il permet d'utiliser GPT-4, Claude, Llama, et bien d'autres modèles depuis une seule interface.
+
+### Avantages d'OpenRouter
+
+- ✅ **Accès Multiple** : 50+ modèles IA différents
+- ✅ **API Unifiée** : Une seule clé pour tous les modèles
+- ✅ **Prix Compétitifs** : Souvent moins cher que les APIs directes
+- ✅ **Modèles Gratuits** : Certains modèles disponibles gratuitement
+- ✅ **Performance** : Latence optimisée
+
+### Configuration OpenRouter
+
+#### 1. Obtention d'une Clé API
+
+1. Rendez-vous sur : https://openrouter.ai
+2. Créez un compte ou connectez-vous
+3. Allez dans "Keys" → "Create Key"
+4. Nommez votre clé (ex: "LoupGarou-Project")
+5. Copiez la clé générée (format : `sk-or-v1-...`)
+6. (Optionnel) Certains modèles gratuits nécessitent des permissions supplémentaires, suivez les instructions sur le site
+
+#### 2. Modèles Disponibles
+
+| Modèle | Prix | Performance | Usage Recommandé |
+|--------|------|-------------|------------------|
+|  `openai/gpt-oss-20b:free` | Gratuit | ⭐⭐⭐⭐ | Test & Développement |
+| `openai/gpt-4o-mini` | Payant | ⭐⭐⭐⭐⭐ | Production |
+| `anthropic/claude-3-haiku` | Payant | ⭐⭐⭐⭐ | Performance |
+| `microsoft/wizardlm-2-8x22b` | Payant | ⭐⭐⭐⭐ | Équilibré |
+
+#### 3. Configuration dans le Projet
+
+```python
+# Dans ai/client.py
+@dataclass
+class OpenRouterClientConfig:
+    api_key: str
+    base_url: str = "https://openrouter.ai/api/v1"
+    model: str = "openai/gpt-oss-20b:free"  # Modèle par défaut
+```
+
+#### 4. Utilisation dans le Code
+
+```python
+# Initialisation du client
+client = OpenRouterClient(OpenRouterClientConfig(
+    api_key="sk-or-v1-your-key",
+    model="meta-llama/llama-3-8b-instruct:free"
+))
+
+# Génération de texte
+response = client.chat_completion_player(
+    messages=[
+        {"role": "system", "content": "Tu es un villageois dans Loup-Garou"},
+        {"role": "user", "content": "Qui suspectes-tu ?"}
+    ],
+    max_tokens=200,
+    temperature=0.8
+)
+```
+
+### Gestion des Erreurs OpenRouter
+
+Le système gère automatiquement :
+- **Erreurs de quota** : Fallback vers modèles gratuits
+- **Erreurs de réseau** : Retry automatique
+- **Clé invalide** : Message d'erreur explicite
+- **Modèle indisponible** : Switch vers modèle alternatif
+
+### Coûts et Limites
+
+- **Modèles Gratuits** : Limitation de requêtes/jour
+- **Modèles Payants** : Facturation par token
+- **Rate Limiting** : Variables selon le modèle
+- **Monitoring** : Tableau de bord sur openrouter.ai
+
+--
