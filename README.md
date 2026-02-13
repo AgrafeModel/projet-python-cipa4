@@ -10,6 +10,27 @@
 - Matheo BERTIN : matheo6209
 - Matteo GISLOT : chr8n8s
 
+# Principe et fonctionnement
+
+Ce programme est un jeu de loup garou de tiercelieux revisité. Vous incarnerez le maire du village
+en charge d'enquêter et de débusquer les loups présents dans le village.
+Vous devrez vous aider des conversations des villageois et de leurs interactions.
+
+Le jeu repose sur plusieurs algorithmes d'IA :
+- API Openrouteur
+- API Gemini
+- API Elevenlabs (TTS)
+- Serveur local Ollama (Mistral)
+
+Ainsi qu'un mode algorithmique accessible hors connexion.
+
+
+Nous vous conseillons de commencer par une partie à 6 joueurs pour comprendre le principe, puis
+d'augmenter ce nombre pour une difficulté croissante (6 - 20 joueurs).
+Les boutons TAB et ESC vous permettrons de gérer le volume des effets sonores et revenir au menu
+lors d'une partie.
+Suivez maintenant les instructions de la partie "Commandes utiles" !
+
 # Commandes utiles
 
 **Env python (Windows - PowerShell)** : 
@@ -375,7 +396,7 @@ Une fois Ollama configuré avec Mistral, vous pourrez utiliser les fonctionnalit
 
 ---
 
-## 🌐 OpenRouter
+# Guide OpenRouter API - Installation & Utilisation
 
 ### Qu'est-ce qu'OpenRouter ?
 
@@ -383,11 +404,11 @@ Une fois Ollama configuré avec Mistral, vous pourrez utiliser les fonctionnalit
 
 ### Avantages d'OpenRouter
 
-- ✅ **Accès Multiple** : 50+ modèles IA différents
-- ✅ **API Unifiée** : Une seule clé pour tous les modèles
-- ✅ **Prix Compétitifs** : Souvent moins cher que les APIs directes
-- ✅ **Modèles Gratuits** : Certains modèles disponibles gratuitement
-- ✅ **Performance** : Latence optimisée
+- **Accès Multiple** : 50+ modèles IA différents
+- **API Unifiée** : Une seule clé pour tous les modèles
+- **Prix Compétitifs** : Souvent moins cher que les APIs directes
+- **Modèles Gratuits** : Certains modèles disponibles gratuitement
+- **Performance** : Latence optimisée
 
 ### Configuration OpenRouter
 
@@ -459,13 +480,7 @@ Le système gère automatiquement :
 
 
 
-## Utilisation d'ElevenLabs TTS
-
-### Installation des dépendances
-
-```bash
-pip install elevenlabs
-```
+# Guide ElevenLabs API (TTS) - Installation & Utilisation
 
 ### Configuration de la clé API
 
