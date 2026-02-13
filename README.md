@@ -1,8 +1,8 @@
-# Projet Python - Groupe 10
+# 🐺 Projet Python - Groupe 10
 
 ![LOUGARIA Logo](assets/lougaria-banner.png)
 
-**Editeurs**
+**Éditeurs**
 
 - Amaury AMRANI : dansunavion
 - Brieuc JOONNEKINDT : OnWix
@@ -10,16 +10,16 @@
 - Matheo BERTIN : matheo6209
 - Matteo GISLOT : chr8n8s
 
-# Principe et fonctionnement
+# 🎯 Principe et fonctionnement
 
-Ce programme est un jeu de loup garou de tiercelieux revisité. Vous incarnerez le maire du village
+Ce programme est un jeu de loup-garou de Thiercelieux revisité. Vous incarnerez le maire du village
 en charge d'enquêter et de débusquer les loups présents dans le village.
 Vous devrez vous aider des conversations des villageois et de leurs interactions.
 
 Le jeu repose sur plusieurs algorithmes d'IA :
-- API Openrouteur
+- API OpenRouter
 - API Gemini
-- API Elevenlabs (TTS)
+- API ElevenLabs (TTS)
 - Serveur local Ollama (Mistral)
 
 Ainsi qu'un mode algorithmique accessible hors connexion.
@@ -27,13 +27,13 @@ Ainsi qu'un mode algorithmique accessible hors connexion.
 
 Nous vous conseillons de commencer par une partie à 6 joueurs pour comprendre le principe, puis
 d'augmenter ce nombre pour une difficulté croissante (6 - 20 joueurs).
-Les boutons TAB et ESC vous permettrons de gérer le volume des effets sonores et revenir au menu
+Les boutons TAB et ESC vous permettront de gérer le volume des effets sonores et de revenir au menu
 lors d'une partie.
-Suivez maintenant les instructions de la partie "Commandes utiles" !
+Suivez maintenant les instructions de la partie « Commandes utiles ».
 
-# Commandes utiles
+# 🛠️ Commandes utiles
 
-**Env python (Windows - PowerShell)** : 
+**Env Python (Windows - PowerShell)** : 
 
 ```bash
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
@@ -43,7 +43,7 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-**Env python (macOS/Linux - Bash/Zsh)** :
+**Env Python (macOS/Linux - Bash/Zsh)** :
 
 ```bash
 python -m venv .venv
@@ -54,40 +54,40 @@ pip install -r requirements.txt
 source .venv/bin/activate #pour lancer l'environnement
 ```
 
-# Interfaces
+# 🖥️ Interfaces
 
 Courtes descriptions des écrans disponibles :
 
-### Accueil
+### 🏠 Accueil
 Écran d’accueil du jeu et point d’entrée principal.
 ![](assets/screen/acceuil.png)
 
-### Paramètres
-Réglages généraux (volume des musique et volume des voix).
+### ⚙️ Paramètres
+Réglages généraux (volume de la musique et volume des voix).
 ![](assets/screen/parametres.png)
 
-### Choix des modèles
-Sélection du moteur/du modèle d’IA : OpenRouteur - Gemini - Ollama.
+### 🧠 Choix des modèles
+Sélection du moteur/du modèle d’IA : OpenRouter - Gemini - Ollama.
 ![](assets/screen/choix_modeles.png)
 
-### Clé API
-Saisie et validation de la clé d’API lors du lancement d'une partie. Clé API de génération (OpenRouter ou Gemini) ou alors du TTS (Génération de voix ElevenLabs).
+### 🔑 Clé API
+Saisie et validation de la clé d’API lors du lancement d’une partie. Clé API de génération (OpenRouter ou Gemini) ou du TTS (génération de voix ElevenLabs).
 ![](assets/screen/cle_api.png)
 
-### Vote
-Interface de la partie et notamment du moment de vote.
+### 🗳️ Vote
+Interface de la partie, notamment le moment du vote.
 ![](assets/screen/vote.png)
 
-### API obsolète
+### ⚠️ API obsolète
 Message d’alerte quand une API n’est plus disponible (message en orange).
 ![](assets/screen/api_obsoltete.png)
 
-### Fin de partie
+### 🏁 Fin de partie
 Écran de résultats et victoire/défaite.
 ![](assets/screen/fin_victoires.png)
 
 
-# Guide Gemini API - Installation & Utilisation
+# 🤖 Guide Gemini API - Installation & Utilisation
 
 ## Obtention de la clé API Gemini (gratuite)
 
@@ -98,7 +98,7 @@ Message d’alerte quand une API n’est plus disponible (message en orange).
 3. Cliquez sur **"Create API Key"**
 4. Copiez la clé générée (format : `AIzaSy...`)
 
-**Important** : Cette clé est secrète et n accepte pas d être partagée
+**Important** : Cette clé est secrète et n’accepte pas d’être partagée
 -> Erreur Gemini: 403 Your API key was reported as leaked. Please use another API key.
 
 ### Limites
@@ -111,7 +111,7 @@ Message d’alerte quand une API n’est plus disponible (message en orange).
 
 ## Où placer la clé API
 
-La clé doit être placée dans le fichier constents.py dans la variable suivante :
+La clé doit être placée dans le fichier constants.py dans la variable suivante :
 API_GEMINI = 'nom_de_la_clé'
 
 ## Appeler l'IA dans un code
@@ -119,7 +119,7 @@ API_GEMINI = 'nom_de_la_clé'
 ```python
 # 1. Installer la bibliothèque
 pip install google-generativeai
-(cf. requierments.txt)
+(cf. requirements.txt)
 
 # 2. Dans votre code Python
 import google.generativeai as genai
@@ -176,7 +176,7 @@ print(discussion)
 ```
 Marc: Franchement, Sophie pose trop de questions, ça me dérange.
 Sophie: Marc, je cherche juste à comprendre qui est suspect.
-Luc: Je suis d accord avec Sophie, elle a raison de poser des questions.
+Luc: Je suis d’accord avec Sophie, elle a raison de poser des questions.
 ```
 
 ### Paramètres avancés
@@ -245,7 +245,7 @@ except Exception as e:
    - Historique des conversations
    - Instructions de format
          ↓
-4. Envoi à Gemini via l API
+4. Envoi à Gemini via l’API
          ↓
 5. Gemini génère toute la discussion
          ↓
@@ -297,7 +297,7 @@ else:
 - **Modèles disponibles** : https://ai.google.dev/gemini-api/docs/models
 
 
-# Guide Ollama - Installation & Utilisation
+# 🧩 Guide Ollama - Installation & Utilisation
 
 ### Sur Windows
 
@@ -396,7 +396,7 @@ Une fois Ollama configuré avec Mistral, vous pourrez utiliser les fonctionnalit
 
 ---
 
-# Guide OpenRouter API - Installation & Utilisation
+# 🌐 Guide OpenRouter API - Installation & Utilisation
 
 ### Qu'est-ce qu'OpenRouter ?
 
@@ -480,7 +480,7 @@ Le système gère automatiquement :
 
 
 
-# Guide ElevenLabs API (TTS) - Installation & Utilisation
+# 🔊 Guide ElevenLabs API (TTS) - Installation & Utilisation
 
 ### Configuration de la clé API
 
